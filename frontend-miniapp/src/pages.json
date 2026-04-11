@@ -1,0 +1,44 @@
+{
+  "pages": [
+    {
+      "path": "pages/index",
+      "style": {
+        "navigationBarTitleText": "AI挂号",
+        "navigationBarBackgroundColor": "#eef4fb",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/appointments/index",
+      "style": {
+        "navigationBarTitleText": "我的预约",
+        "navigationBarBackgroundColor": "#eef4fb",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/guide/index",
+      "style": {
+        "navigationBarTitleText": "就诊指引",
+        "navigationBarBackgroundColor": "#eef4fb",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置",
+        "navigationBarBackgroundColor": "#eef4fb",
+        "navigationBarTextStyle": "black"
+      }
+    }
+  ],
+  "globalStyle": {
+    "backgroundColor": "#eef4fb",
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#eef4fb",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "AI挂号"
+  },
+  "subPackages": []
+}

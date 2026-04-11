@@ -1,0 +1,58 @@
+server:
+  port: 10082
+
+spring:
+  application:
+    name: registration-agent
+  config:
+    import:
+      - optional:nacos:ai-smartclinic-common.yml
+      - optional:nacos:${spring.application.name}.yml
+  cloud:
+    nacos:
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        namespace: ${NACOS_CONFIG_NAMESPACE:${NACOS_NAMESPACE:}}
+        group: ${NACOS_CONFIG_GROUP:AI_SMARTCLINIC}
+        file-extension: yml
+        refresh-enabled: true
+  ai:
+    model:
+      chat: dashscope
+      embedding: dashscope
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      rerank: none
+      video: none
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      agent:
+        enabled: false
+      image:
+        enabled: false
+      chat:
+        enabled: true
+        options:
+          model: ${DASHSCOPE_MODEL:qwen-plus}
+      embedding:
+        enabled: true
+
+app:
+  mcp:
+    patient:
+      base-url: ${PATIENT_MCP_BASE_URL:http://localhost:10101}
+    schedule:
+      base-url: ${SCHEDULE_MCP_BASE_URL:http://localhost:10102}
+    registration:
+      base-url: ${REGISTRATION_MCP_BASE_URL:http://localhost:10103}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

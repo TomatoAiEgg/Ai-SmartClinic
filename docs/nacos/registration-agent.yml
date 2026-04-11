@@ -1,0 +1,8 @@
+app:
+  mcp:
+    patient:
+      base-url: ${PATIENT_MCP_BASE_URL:http://localhost:10101}
+    schedule:
+      base-url: ${SCHEDULE_MCP_BASE_URL:http://localhost:10102}
+    registration:
+      base-url: ${REGISTRATION_MCP_BASE_URL:http://localhost:10103}

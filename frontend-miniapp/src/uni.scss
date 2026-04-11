@@ -1,0 +1,51 @@
+/* 颜色变量 */
+$brand-primary: #237bff;
+$brand-primary-dark: #1454bf;
+$brand-surface: rgba(255, 255, 255, 0.88);
+$brand-border: rgba(18, 37, 63, 0.08);
+$brand-text: #12253f;
+$brand-subtle: #60738d;
+$brand-danger: #db4d63;
+$brand-success: #13a56b;
+$brand-warning: #f1a847;
+
+/* 间距 */
+$space-2: 8rpx;
+$space-3: 12rpx;
+$space-4: 16rpx;
+$space-5: 20rpx;
+$space-6: 24rpx;
+$space-8: 32rpx;
+$space-10: 40rpx;
+
+/* 阴影与圆角 */
+$radius-card: 28rpx;
+$radius-pill: 999rpx;
+$shadow-card: 0 18rpx 48rpx rgba(35, 58, 99, 0.1);
+
+.page-shell {
+  min-height: 100vh;
+  padding: $space-6;
+  padding-bottom: 180rpx;
+}
+
+.glass-card {
+  background: $brand-surface;
+  border: 1rpx solid $brand-border;
+  border-radius: $radius-card;
+  box-shadow: $shadow-card;
+  backdrop-filter: blur(20rpx);
+}
+
+.section-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: $brand-text;
+}
+
+.section-subtitle {
+  margin-top: $space-2;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: $brand-subtle;
+}

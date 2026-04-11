@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-chat-service
+  config:
+    import:
+      - optional:nacos:ai-smartclinic-common.yml
+      - optional:nacos:${spring.application.name}.yml
+  cloud:
+    nacos:
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        namespace: ${NACOS_CONFIG_NAMESPACE:${NACOS_NAMESPACE:}}
+        group: ${NACOS_CONFIG_GROUP:AI_SMARTCLINIC}
+        file-extension: yml
+        refresh-enabled: true
+
+app:
+  supervisor:
+    base-url: ${SUPERVISOR_BASE_URL:http://localhost:10080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

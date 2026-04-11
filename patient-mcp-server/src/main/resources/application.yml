@@ -1,0 +1,32 @@
+server:
+  port: 10101
+
+spring:
+  application:
+    name: patient-mcp-server
+  ai:
+    mcp:
+      server:
+        name: patient-mcp-server
+        version: 0.1.0
+        type: SYNC
+    alibaba:
+      mcp:
+        nacos:
+          register:
+            enabled: false
+          server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+          username: ${NACOS_USERNAME:nacos}
+          password: ${NACOS_PASSWORD:nacos}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
