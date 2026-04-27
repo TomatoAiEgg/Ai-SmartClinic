@@ -1,8 +1,20 @@
 <script setup lang="ts">
-type TabKey = 'chat' | 'appointments' | 'guide' | 'settings'
+import type { AppRouteName } from '@/types/app'
+import { openBottomPage } from '@/router/navigation'
+import { APP_ROUTES } from '@/router/routes'
+
+type TabKey = AppRouteName
+
+const TAB_META: Record<TabKey, { label: string, icon: string }> = {
+  chat: { label: '对话', icon: '问' },
+  appointments: { label: '预约', icon: '号' },
+  guide: { label: '指引', icon: '导' },
+  profile: { label: '我的', icon: '我' },
+  patients: { label: '就诊人', icon: '人' },
+}
 
 interface TabItem {
-  key: TabKey
+  key: AppRouteName
   label: string
   icon: string
   path: string
@@ -12,18 +24,20 @@ const props = defineProps<{
   current: TabKey
 }>()
 
-const tabs: TabItem[] = [
-  { key: 'chat', label: '对话', icon: '问', path: '/pages/index' },
-  { key: 'appointments', label: '预约', icon: '单', path: '/pages/appointments/index' },
-  { key: 'guide', label: '指引', icon: '导', path: '/pages/guide/index' },
-  { key: 'settings', label: '设置', icon: '设', path: '/pages/settings/index' },
-]
+const tabs: TabItem[] = APP_ROUTES
+  .filter(route => route.bottomNav)
+  .map(route => ({
+    key: route.name,
+    label: TAB_META[route.name].label,
+    icon: TAB_META[route.name].icon,
+    path: route.path,
+  }))
 
 function navigate(path: string, key: TabKey) {
   if (props.current === key) {
     return
   }
-  uni.redirectTo({ url: path })
+  void openBottomPage(path)
 }
 </script>
 

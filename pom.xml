@@ -21,7 +21,9 @@
         <spring-ai-alibaba.version>1.0.0.4</spring-ai-alibaba.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
         <spring-cloud-alibaba.version>2023.0.1.0</spring-cloud-alibaba.version>
+        <nacos-client-mcp.version>3.0.2</nacos-client-mcp.version>
         <springdoc.version>2.5.0</springdoc.version>
+        <mybatis-plus.version>3.5.15</mybatis-plus.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -58,6 +60,7 @@
     <modules>
         <module>common-domain</module>
         <module>common-ai</module>
+        <module>common-agent</module>
         <module>gateway-chat-service</module>
         <module>supervisor-agent</module>
         <module>triage-agent</module>

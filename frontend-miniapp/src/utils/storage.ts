@@ -1,7 +1,7 @@
 export const STORAGE_KEYS = {
-  config: 'ai-registration:config',
+  auth: 'ai-registration:auth',
+  chatSession: 'ai-registration:chat-session',
   chatHistory: 'ai-registration:chat-history',
-  appointments: 'ai-registration:appointments',
 } as const
 
 export function readStorage<T>(key: string, fallback: T): T {

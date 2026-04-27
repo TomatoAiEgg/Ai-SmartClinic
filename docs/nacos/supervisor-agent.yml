@@ -1,8 +1,8 @@
 app:
   agents:
     triage:
-      base-url: ${TRIAGE_AGENT_BASE_URL:http://localhost:10081}
+      base-url: ${TRIAGE_AGENT_BASE_URL:}
     registration:
-      base-url: ${REGISTRATION_AGENT_BASE_URL:http://localhost:10082}
+      base-url: ${REGISTRATION_AGENT_BASE_URL:}
     guide:
-      base-url: ${GUIDE_AGENT_BASE_URL:http://localhost:10083}
+      base-url: ${GUIDE_AGENT_BASE_URL:}

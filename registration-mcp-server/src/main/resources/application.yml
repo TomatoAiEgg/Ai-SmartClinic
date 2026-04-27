@@ -4,6 +4,14 @@ server:
 spring:
   application:
     name: registration-mcp-server
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:Ai-SmartClinic}?currentSchema=${POSTGRES_SCHEMA:ai_registration}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.ai.autoconfigure.mcp.client.NacosMcpAutoConfiguration
   ai:
     mcp:
       server:
@@ -14,7 +22,7 @@ spring:
       mcp:
         nacos:
           register:
-            enabled: false
+            enabled: ${NACOS_MCP_REGISTER_ENABLED:false}
           server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
           username: ${NACOS_USERNAME:nacos}
           password: ${NACOS_PASSWORD:nacos}
@@ -30,3 +38,7 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

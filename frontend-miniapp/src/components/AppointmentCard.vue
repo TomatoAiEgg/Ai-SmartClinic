@@ -11,8 +11,8 @@ const emit = defineEmits<{
 }>()
 
 function statusLabel(status: string) {
-  if (status === 'CONFIRMED') {
-    return '已确认'
+  if (status === 'BOOKED' || status === 'CONFIRMED') {
+    return '已预约'
   }
   if (status === 'CANCELLED') {
     return '已取消'
@@ -20,7 +20,7 @@ function statusLabel(status: string) {
   if (status === 'RESCHEDULED') {
     return '已改约'
   }
-  return status
+  return status || '未知状态'
 }
 </script>
 

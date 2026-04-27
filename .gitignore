@@ -4,4 +4,9 @@
 **/.DS_Store
 *.log
 logs/
+.ai/
+.playwright-mcp/
+frontend-miniapp/.logs/
+com/
+.runtime-logs/
 .env

@@ -41,6 +41,27 @@ spring:
           model: ${DASHSCOPE_MODEL:qwen-plus}
       embedding:
         enabled: true
+        options:
+          model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+
+ai:
+  service:
+    model-router:
+      chat:
+        default-model: ${AI_CHAT_DEFAULT_MODEL:qwen-plus}
+        fallback-models:
+          - ${AI_CHAT_FALLBACK_MODEL_1:qwen-turbo}
+          - ${AI_CHAT_FALLBACK_MODEL_2:qwen-max}
+        fallback-enabled: true
+        exhausted-ttl: ${AI_CHAT_EXHAUSTED_TTL:PT1H}
+        transient-retries: ${AI_CHAT_TRANSIENT_RETRIES:1}
+      embedding:
+        default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+        fallback-models:
+          - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v3}
+        fallback-enabled: true
+        exhausted-ttl: ${AI_EMBEDDING_EXHAUSTED_TTL:PT1H}
+        transient-retries: ${AI_EMBEDDING_TRANSIENT_RETRIES:1}
 
 management:
   endpoints:

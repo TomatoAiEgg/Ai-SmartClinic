@@ -1,6 +1,9 @@
 <script lang="ts">
+import { installAuthInterceptors } from '@/utils/auth'
+
 export default {
   onLaunch() {
+    installAuthInterceptors()
     console.log('AI挂号小程序已启动')
   },
 }

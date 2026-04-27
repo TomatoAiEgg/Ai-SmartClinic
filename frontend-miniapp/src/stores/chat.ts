@@ -1,21 +1,14 @@
 import type { ChatApiResponse, ChatMessage, MessageAction } from '@/types/app'
 import { defineStore } from 'pinia'
-import { postChat } from '@/services/api'
+import { postChat } from '@/services/chat'
 import { useAppointmentsStore } from '@/stores/appointments'
-import { useConfigStore } from '@/stores/config'
+import { useAuthStore } from '@/stores/auth'
 import { STORAGE_KEYS, createLocalId, readStorage, writeStorage } from '@/utils/storage'
-
-const WELCOME_MESSAGE: ChatMessage = {
-  id: createLocalId('assistant'),
-  role: 'assistant',
-  content: '我是 AI 挂号助手。你可以直接说“帮我挂明天下午呼吸内科”或者“查询挂号 REG-1234ABCD”。',
-  createdAt: formatTimestamp(new Date()),
-  route: 'GUIDE',
-}
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
-    messages: readStorage<ChatMessage[]>(STORAGE_KEYS.chatHistory, [WELCOME_MESSAGE]),
+    chatId: loadInitialChatId(),
+    messages: readStorage<ChatMessage[]>(STORAGE_KEYS.chatHistory, []),
     sending: false,
   }),
   getters: {
@@ -25,17 +18,9 @@ export const useChatStore = defineStore('chat', {
   },
   actions: {
     ensureWelcome() {
-      if (!this.messages.length) {
-        this.messages = [WELCOME_MESSAGE]
-        this.persist()
-      }
     },
     clearHistory() {
-      this.messages = [{
-        ...WELCOME_MESSAGE,
-        id: createLocalId('assistant'),
-        createdAt: formatTimestamp(new Date()),
-      }]
+      this.messages = []
       this.persist()
     },
     async sendMessage(message: string, metadata: Record<string, string> = {}) {
@@ -44,7 +29,7 @@ export const useChatStore = defineStore('chat', {
         return undefined
       }
 
-      const configStore = useConfigStore()
+      const authStore = useAuthStore()
       const appointmentsStore = useAppointmentsStore()
 
       this.appendMessage({
@@ -56,12 +41,12 @@ export const useChatStore = defineStore('chat', {
 
       this.sending = true
       try {
-        const response = await postChat(configStore.baseUrl, {
-          chatId: configStore.chatId,
-          userId: configStore.userId,
+        const response = await postChat({
+          chatId: this.chatId,
+          userId: authStore.userId,
           message: content,
           metadata,
-        })
+        }, authStore.toRequestContext())
 
         this.appendMessage({
           id: createLocalId('assistant'),
@@ -94,18 +79,38 @@ export const useChatStore = defineStore('chat', {
       this.messages = [...this.messages, message].slice(-60)
       this.persist()
     },
+    rotateChatId() {
+      this.chatId = createLocalId('chat')
+      this.persistSession()
+      return this.chatId
+    },
     persist() {
       writeStorage(STORAGE_KEYS.chatHistory, this.messages)
     },
+    persistSession() {
+      writeStorage(STORAGE_KEYS.chatSession, {
+        chatId: this.chatId,
+      })
+    },
   },
 })
+
+function loadInitialChatId() {
+  const session = readStorage<{ chatId?: string }>(STORAGE_KEYS.chatSession, {})
+  if (session.chatId) {
+    return session.chatId
+  }
+
+  return createLocalId('chat')
+}
 
 function buildActions(response: ChatApiResponse): MessageAction[] {
   const actions: MessageAction[] = []
   const data = toStringMap(response.data)
   const action = data.action
+  const confirmationId = data.confirmationId
 
-  if (response.requiresConfirmation && action) {
+  if (response.requiresConfirmation && action && confirmationId) {
     actions.push({
       label: action === 'cancel' ? '确认取消' : action === 'reschedule' ? '确认改约' : '确认提交',
       message: confirmationText(action),
@@ -129,6 +134,7 @@ function buildActions(response: ChatApiResponse): MessageAction[] {
       message: `帮我挂${data.departmentName || data.departmentCode}最近的号`,
       metadata: {
         action: 'create',
+        departmentCode: data.departmentCode,
       },
       tone: 'primary',
     })

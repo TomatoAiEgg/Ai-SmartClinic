@@ -12,7 +12,7 @@ const emit = defineEmits<{
 function routeLabel(route?: ChatMessage['route']) {
   switch (route) {
     case 'TRIAGE':
-      return '导诊'
+      return '分诊'
     case 'REGISTRATION':
       return '挂号'
     case 'GUIDE':

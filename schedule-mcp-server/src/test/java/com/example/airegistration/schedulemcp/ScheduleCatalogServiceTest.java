@@ -1,7 +1,18 @@
 package com.example.airegistration.schedulemcp;
 
-import com.example.airegistration.domain.ScheduleSlotRequest;
-import com.example.airegistration.domain.SlotSummary;
+import com.example.airegistration.enums.ApiErrorCode;
+import com.example.airegistration.dto.ScheduleSlotRequest;
+import com.example.airegistration.dto.SlotSummary;
+import com.example.airegistration.schedulemcp.entity.ScheduleSlotInventory;
+import com.example.airegistration.schedulemcp.entity.ScheduleSlotKey;
+import com.example.airegistration.schedulemcp.exception.ScheduleOperationException;
+import com.example.airegistration.schedulemcp.repository.ScheduleSlotRepository;
+import com.example.airegistration.schedulemcp.service.ScheduleCatalogApplicationService;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -9,7 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ScheduleCatalogServiceTest {
 
-    private final ScheduleCatalogService service = new ScheduleCatalogService();
+    private final ScheduleCatalogApplicationService service =
+            new ScheduleCatalogApplicationService(new FakeScheduleSlotRepository());
 
     @Test
     void shouldReserveAndReleaseSlot() {
@@ -37,7 +49,37 @@ class ScheduleCatalogServiceTest {
                 "09:00"
         )))
                 .isInstanceOf(ScheduleOperationException.class)
-                .hasMessageContaining("does not exist");
+                .satisfies(ex -> assertThat(((ScheduleOperationException) ex).getErrorCode())
+                        .isEqualTo(ApiErrorCode.NOT_FOUND));
+    }
+
+    @Test
+    void shouldRejectNullSlotRequest() {
+        assertThatThrownBy(() -> service.resolve(null))
+                .isInstanceOfSatisfying(ScheduleOperationException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ApiErrorCode.INVALID_REQUEST);
+                    assertThat(ex.getDetails()).containsEntry("field", "request");
+                });
+    }
+
+    @Test
+    void shouldRejectBlankRequiredField() {
+        assertThatThrownBy(() -> service.resolve(new ScheduleSlotRequest(
+                " ",
+                "doc-101",
+                "2026-04-09",
+                "09:00"
+        )))
+                .isInstanceOfSatisfying(ScheduleOperationException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ApiErrorCode.INVALID_REQUEST);
+                    assertThat(ex.getDetails()).containsEntry("field", "departmentCode");
+                });
+    }
+
+    @Test
+    void shouldSearchAllSlotsWhenKeywordIsBlank() {
+        assertThat(service.search(null)).isNotEmpty();
+        assertThat(service.search(" ")).isNotEmpty();
     }
 
     @Test
@@ -56,6 +98,67 @@ class ScheduleCatalogServiceTest {
 
         assertThatThrownBy(() -> service.reserve(request))
                 .isInstanceOf(ScheduleOperationException.class)
-                .hasMessageContaining("No remaining slot");
+                .satisfies(ex -> assertThat(((ScheduleOperationException) ex).getErrorCode())
+                        .isEqualTo(ApiErrorCode.NOT_FOUND));
+    }
+
+    private static class FakeScheduleSlotRepository implements ScheduleSlotRepository {
+
+        private final Map<ScheduleSlotKey, ScheduleSlotInventory> slots = new ConcurrentHashMap<>();
+
+        FakeScheduleSlotRepository() {
+            seedSlots().forEach(slot -> slots.put(slot.key(), slot));
+        }
+
+        @Override
+        public List<ScheduleSlotInventory> findAll() {
+            return List.copyOf(slots.values());
+        }
+
+        @Override
+        public Optional<ScheduleSlotInventory> findByKey(ScheduleSlotKey key) {
+            return Optional.ofNullable(slots.get(key));
+        }
+
+        @Override
+        public SlotSummary reserve(ScheduleSlotKey key) {
+            return getRequiredSlot(key).reserve();
+        }
+
+        @Override
+        public SlotSummary release(ScheduleSlotKey key) {
+            return getRequiredSlot(key).release();
+        }
+
+        private ScheduleSlotInventory getRequiredSlot(ScheduleSlotKey key) {
+            ScheduleSlotInventory slot = slots.get(key);
+            if (slot == null) {
+                throw new ScheduleOperationException(
+                        ApiErrorCode.NOT_FOUND,
+                        "Slot does not exist.",
+                        Map.of(
+                                "departmentCode", key.departmentCode(),
+                                "doctorId", key.doctorId(),
+                                "clinicDate", key.clinicDate(),
+                                "startTime", key.startTime()
+                        )
+                );
+            }
+            return slot;
+        }
+
+        private List<ScheduleSlotInventory> seedSlots() {
+            LocalDate today = LocalDate.now();
+            return List.of(
+                    new ScheduleSlotInventory("RESP", "Respiratory Medicine", "doc-101", "Dr. Rivera", today.plusDays(1).toString(), "09:00", 6),
+                    new ScheduleSlotInventory("RESP", "Respiratory Medicine", "doc-106", "Dr. Murphy", today.plusDays(1).toString(), "14:30", 4),
+                    new ScheduleSlotInventory("GEN", "General Medicine", "doc-102", "Dr. Park", today.plusDays(1).toString(), "10:30", 8),
+                    new ScheduleSlotInventory("DERM", "Dermatology", "doc-103", "Dr. Patel", today.plusDays(1).toString(), "14:00", 4),
+                    new ScheduleSlotInventory("GI", "Gastroenterology", "doc-104", "Dr. Khan", today.plusDays(2).toString(), "09:30", 3),
+                    new ScheduleSlotInventory("PED", "Pediatrics", "doc-105", "Dr. Gomez", today.plusDays(2).toString(), "15:00", 5),
+                    new ScheduleSlotInventory("GYN", "Gynecology", "doc-107", "Dr. Lopez", today.plusDays(2).toString(), "13:30", 4)
+            );
+        }
     }
 }
+

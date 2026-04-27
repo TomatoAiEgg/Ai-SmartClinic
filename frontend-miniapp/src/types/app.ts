@@ -6,9 +6,22 @@ export type ActionTone = 'primary' | 'default' | 'danger'
 
 export interface ChatPayload {
   chatId: string
-  userId: string
+  userId?: string
   message: string
   metadata: Record<string, string>
+}
+
+export interface LoginResponse {
+  token: string
+  userId: string
+  expiresIn: number
+  tokenHeader: string
+}
+
+export interface WechatLoginPayload {
+  code: string
+  nickname: string
+  avatarUrl: string
 }
 
 export interface ChatApiResponse {
@@ -49,9 +62,43 @@ export interface AppointmentRecord {
   updatedAt: string
 }
 
-export interface AppConfig {
-  baseUrl: string
+export interface PatientProfile {
+  patientId: string
   userId: string
+  name: string
+  idType: string
+  maskedIdNumber?: string
+  maskedPhone?: string
+  relationCode: string
+  defaultPatient: boolean
+}
+
+export interface PatientCreatePayload {
+  name: string
+  idType: string
+  idNumber: string
+  phone: string
+  relationCode: string
+  defaultPatient: boolean
+}
+
+export interface WechatProfile {
+  nickname: string
+  avatarUrl: string
+  loginCode: string
+}
+
+export interface AuthState {
+  userId: string
+  username: string
+  authToken: string
+  tokenHeader: string
+  wechatNickname: string
+  wechatAvatarUrl: string
+  loginMode: 'none' | 'wechat'
+}
+
+export interface ChatSessionState {
   chatId: string
 }
 
@@ -60,4 +107,14 @@ export interface QuickAction {
   description: string
   message: string
   metadata?: Record<string, string>
+}
+
+export type AppRouteName = 'chat' | 'appointments' | 'guide' | 'profile' | 'patients'
+
+export interface AppRoute {
+  name: AppRouteName
+  path: string
+  title: string
+  requiresAuth: boolean
+  bottomNav: boolean
 }

@@ -19,6 +19,13 @@ spring:
         group: ${NACOS_CONFIG_GROUP:AI_SMARTCLINIC}
         file-extension: yml
         refresh-enabled: true
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:127.0.0.1}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
+      database: ${SPRING_DATA_REDIS_DATABASE:0}
+      timeout: 5s
   ai:
     model:
       chat: dashscope
@@ -41,8 +48,34 @@ spring:
           model: ${DASHSCOPE_MODEL:qwen-plus}
       embedding:
         enabled: true
+        options:
+          model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+
+ai:
+  service:
+    model-router:
+      chat:
+        default-model: ${AI_CHAT_DEFAULT_MODEL:qwen-plus}
+        fallback-models:
+          - ${AI_CHAT_FALLBACK_MODEL_1:qwen-turbo}
+          - ${AI_CHAT_FALLBACK_MODEL_2:qwen-max}
+        fallback-enabled: true
+        exhausted-ttl: ${AI_CHAT_EXHAUSTED_TTL:PT1H}
+        transient-retries: ${AI_CHAT_TRANSIENT_RETRIES:1}
+      embedding:
+        default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+        fallback-models:
+          - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v3}
+        fallback-enabled: true
+        exhausted-ttl: ${AI_EMBEDDING_EXHAUSTED_TTL:PT1H}
+        transient-retries: ${AI_EMBEDDING_TRANSIENT_RETRIES:1}
 
 app:
+  confirmation:
+    ttl: ${REGISTRATION_CONFIRMATION_TTL:PT10M}
+  ai:
+    registration-intent:
+      llm-enabled: ${REGISTRATION_INTENT_LLM_ENABLED:true}
   mcp:
     patient:
       base-url: ${PATIENT_MCP_BASE_URL:http://localhost:10101}

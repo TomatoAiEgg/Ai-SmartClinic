@@ -1,0 +1,68 @@
+[
+  {
+    "id": "rule-write-confirmation-gate",
+    "sceneTags": ["CREATE_PREVIEW", "CREATE_RESULT", "CANCEL_PREVIEW", "CANCEL_RESULT", "RESCHEDULE_PREVIEW", "RESCHEDULE_RESULT", "ERROR"],
+    "actionTags": ["CREATE", "CANCEL", "RESCHEDULE"],
+    "keywords": ["确认", "confirmed", "previewed", "confirmation", "按钮"],
+    "content": "创建、取消、改约都属于写操作。只有存在预览上下文并且用户明确确认后才执行；否则只能返回预览或补充信息，不能假装已经提交。",
+    "directives": {
+      "previewBeforeWrite": true
+    }
+  },
+  {
+    "id": "rule-create-patient-and-slot",
+    "sceneTags": ["CREATE_MISSING_DEPARTMENT", "CREATE_PREVIEW", "CREATE_RESULT"],
+    "actionTags": ["CREATE"],
+    "keywords": ["挂号", "预约", "科室", "号源", "就诊人", "patient"],
+    "content": "创建挂号前先确认默认就诊人和目标号源。缺少科室、医生、日期或时间时，应提示补充信息或展示可确认的预览。",
+    "directives": {
+      "createRequiredFields": ["departmentCode"]
+    }
+  },
+  {
+    "id": "rule-query-detail-vs-list",
+    "sceneTags": ["QUERY_MISSING_ID", "QUERY_RESULT", "QUERY_LIST"],
+    "actionTags": ["QUERY"],
+    "keywords": ["查询", "记录", "单号", "status", "list", "registrationId"],
+    "content": "查询时如果提供 registrationId 就返回单条挂号结果；没有 registrationId 就查询当前用户的挂号记录列表，并带上已解析出的筛选条件。"
+  },
+  {
+    "id": "rule-cancel-preview-and-release",
+    "sceneTags": ["CANCEL_MISSING_ID", "CANCEL_ALREADY_CANCELLED", "CANCEL_PREVIEW", "CANCEL_RESULT"],
+    "actionTags": ["CANCEL"],
+    "keywords": ["取消", "退号", "cancel"],
+    "content": "取消前先查询原挂号记录。若记录已取消，应直接告知；未确认前只能返回取消预览，确认后再执行取消并释放号源。",
+    "directives": {
+      "requireRegistrationId": true,
+      "previewBeforeWrite": true
+    }
+  },
+  {
+    "id": "rule-reschedule-constraints",
+    "sceneTags": ["RESCHEDULE_MISSING_ID", "RESCHEDULE_MISSING_TARGET_TIME", "RESCHEDULE_CANCELLED_RECORD", "RESCHEDULE_SAME_SLOT", "RESCHEDULE_PREVIEW", "RESCHEDULE_RESULT"],
+    "actionTags": ["RESCHEDULE"],
+    "keywords": ["改约", "改时间", "reschedule"],
+    "content": "改约前先确认原挂号存在且未取消，再解析目标时间。当前版本仅支持同科室、同医生改约；若目标号源与原号源一致，应明确说明无需改约。",
+    "directives": {
+      "requireRegistrationId": true,
+      "previewBeforeWrite": true,
+      "rescheduleRequiredFields": ["clinicDate", "startTime"],
+      "allowDepartmentChangeOnReschedule": false,
+      "allowDoctorChangeOnReschedule": false
+    }
+  },
+  {
+    "id": "rule-patient-binding-fallback",
+    "sceneTags": ["ERROR", "CREATE_PREVIEW", "CREATE_RESULT"],
+    "actionTags": ["CREATE"],
+    "keywords": ["bindPatient", "就诊人", "patient binding", "default patient"],
+    "content": "如果当前账号没有默认就诊人，应明确提示先绑定就诊人，再继续挂号，不得继续执行创建挂号写操作。"
+  },
+  {
+    "id": "rule-response-fact-guard",
+    "sceneTags": ["ALL"],
+    "actionTags": ["ALL"],
+    "keywords": ["doctorName", "departmentName", "字段", "数据", "事实"],
+    "content": "回复只能使用结构化业务数据中明确存在的字段。若缺少 doctorName 或 departmentName，可以展示 doctorId 或 departmentCode，但不得编造展示名。"
+  }
+]

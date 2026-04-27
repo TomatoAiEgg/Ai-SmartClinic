@@ -1,10 +1,13 @@
 import type { AppointmentRecord, ChatApiResponse } from '@/types/app'
+import type { RequestAuthContext } from '@/services/request'
 import { defineStore } from 'pinia'
-import { STORAGE_KEYS, readStorage, writeStorage } from '@/utils/storage'
+import { fetchAppointment, fetchAppointments } from '@/services/appointments'
 
 export const useAppointmentsStore = defineStore('appointments', {
   state: () => ({
-    records: readStorage<AppointmentRecord[]>(STORAGE_KEYS.appointments, []),
+    records: [] as AppointmentRecord[],
+    loading: false,
+    error: '',
   }),
   getters: {
     items(state) {
@@ -12,6 +15,26 @@ export const useAppointmentsStore = defineStore('appointments', {
     },
   },
   actions: {
+    async load(authContext: RequestAuthContext) {
+      this.loading = true
+      this.error = ''
+      try {
+        this.records = await fetchAppointments(authContext)
+        return this.records
+      }
+      catch (error) {
+        this.error = readErrorMessage(error)
+        throw error
+      }
+      finally {
+        this.loading = false
+      }
+    },
+    async refreshOne(registrationId: string, authContext: RequestAuthContext) {
+      const record = await fetchAppointment(registrationId, authContext)
+      this.upsert(record)
+      return record
+    },
     upsert(record: AppointmentRecord) {
       const index = this.records.findIndex(item => item.registrationId === record.registrationId)
       if (index >= 0) {
@@ -20,9 +43,14 @@ export const useAppointmentsStore = defineStore('appointments', {
       else {
         this.records.unshift(record)
       }
-      this.persist()
     },
     syncFromResponse(response: ChatApiResponse) {
+      const responseRecords = readRecords(response.data?.records)
+      if (responseRecords.length) {
+        this.records = responseRecords
+        return
+      }
+
       const registrationId = readString(response.data?.registrationId)
       if (!registrationId) {
         return
@@ -42,16 +70,46 @@ export const useAppointmentsStore = defineStore('appointments', {
     },
     clear() {
       this.records = []
-      this.persist()
-    },
-    persist() {
-      writeStorage(STORAGE_KEYS.appointments, this.records)
     },
   },
 })
 
+function readRecords(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.map(toAppointmentRecord).filter(isAppointmentRecord)
+}
+
+function toAppointmentRecord(value: unknown): AppointmentRecord | undefined {
+  const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const registrationId = readString(item.registrationId)
+  if (!registrationId) {
+    return undefined
+  }
+  return {
+    registrationId,
+    status: readString(item.status) || 'UNKNOWN',
+    message: readString(item.message) || '已从后端同步预约记录。',
+    patientId: readString(item.patientId),
+    departmentCode: readString(item.departmentCode),
+    doctorId: readString(item.doctorId),
+    clinicDate: readString(item.clinicDate),
+    startTime: readString(item.startTime),
+    updatedAt: formatTimestamp(new Date()),
+  }
+}
+
+function isAppointmentRecord(value: AppointmentRecord | undefined): value is AppointmentRecord {
+  return Boolean(value)
+}
+
 function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function readErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '预约记录加载失败。'
 }
 
 function formatTimestamp(date: Date) {

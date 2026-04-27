@@ -17,17 +17,25 @@
       }
     },
     {
-      "path": "pages/guide/index",
+      "path": "pages/profile/index",
       "style": {
-        "navigationBarTitleText": "就诊指引",
+        "navigationBarTitleText": "个人中心",
         "navigationBarBackgroundColor": "#eef4fb",
         "navigationBarTextStyle": "black"
       }
     },
     {
-      "path": "pages/settings/index",
+      "path": "pages/patients/index",
       "style": {
-        "navigationBarTitleText": "设置",
+        "navigationBarTitleText": "就诊人管理",
+        "navigationBarBackgroundColor": "#eef4fb",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/guide/index",
+      "style": {
+        "navigationBarTitleText": "就诊指引",
         "navigationBarBackgroundColor": "#eef4fb",
         "navigationBarTextStyle": "black"
       }
