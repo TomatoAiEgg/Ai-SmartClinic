@@ -23,18 +23,18 @@ public class TriageRagService {
 
     private static final RagSearchSpec SEARCH_SPEC = new RagSearchSpec(
             "triage-knowledge",
-            "triage_knowledge_chunk",
-            "evidence_id",
+            "knowledge_chunk",
+            "id",
             "title",
             "content",
             "embedding",
             "namespace",
             "enabled",
-            null,
+            "metadata",
             Map.of(
-                    "departmentCode", "department_code",
-                    "departmentName", "department_name",
-                    "emergency", "emergency"
+                    "departmentCode", "metadata ->> 'departmentCode'",
+                    "departmentName", "metadata ->> 'departmentName'",
+                    "emergency", "metadata ->> 'emergency'"
             ),
             null
     );
@@ -110,7 +110,7 @@ public class TriageRagService {
 
     private static String stringAttribute(RagSearchHit hit, String key) {
         Object value = hit.attributes().get(key);
-        return value == null ? null : String.valueOf(value);
+        return value == null ? "" : String.valueOf(value);
     }
 
     private static boolean booleanAttribute(RagSearchHit hit, String key) {

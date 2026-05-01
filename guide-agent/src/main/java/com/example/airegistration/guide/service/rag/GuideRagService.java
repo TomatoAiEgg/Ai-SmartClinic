@@ -23,8 +23,8 @@ public class GuideRagService {
 
     private static final RagSearchSpec SEARCH_SPEC = new RagSearchSpec(
             "guide-knowledge",
-            "guide_knowledge_chunk",
-            "citation_id",
+            "knowledge_chunk",
+            "id",
             "title",
             "content",
             "embedding",
@@ -32,8 +32,8 @@ public class GuideRagService {
             "enabled",
             "metadata",
             Map.of(
-                    "sourceId", "source_id",
-                    "sourceName", "source_name",
+                    "sourceId", "metadata ->> 'sourceId'",
+                    "sourceName", "metadata ->> 'sourceName'",
                     "documentId", "document_id"
             ),
             null
@@ -196,6 +196,6 @@ public class GuideRagService {
 
     private static String stringAttribute(RagSearchHit hit, String key) {
         Object value = hit.attributes().get(key);
-        return value == null ? null : String.valueOf(value);
+        return value == null ? "" : String.valueOf(value);
     }
 }

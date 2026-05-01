@@ -45,8 +45,17 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_namespace_enabled
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_metadata_gin
     ON knowledge_chunk USING gin (metadata);
 
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_department_code
+    ON knowledge_chunk ((metadata ->> 'departmentCode'));
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_action_tag
+    ON knowledge_chunk ((metadata ->> 'actionTag'));
+
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_embedding_hnsw
     ON knowledge_chunk USING hnsw (embedding vector_cosine_ops);
+
+COMMENT ON COLUMN knowledge_chunk.metadata IS
+    'RAG chunk metadata. triage uses departmentCode/departmentName/emergency; guide uses sourceId/sourceName; registration policy uses policyType/actionTag/validFrom/validTo.';
 
 CREATE TABLE IF NOT EXISTS knowledge_ingest_job (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -26,6 +26,42 @@ class RagSearchSpecTest {
     }
 
     @Test
+    void shouldAllowSafeMetadataProjectionExpressions() {
+        RagSearchSpec spec = new RagSearchSpec(
+                "test",
+                "knowledge_chunk",
+                "id",
+                "title",
+                "content",
+                "embedding",
+                "namespace",
+                "enabled",
+                "metadata",
+                Map.of("departmentCode", "metadata ->> 'departmentCode'"),
+                null
+        );
+
+        assertThat(spec.attributeColumns()).containsEntry("departmentCode", "metadata ->> 'departmentCode'");
+    }
+
+    @Test
+    void shouldRejectUnsafeProjectionExpressions() {
+        assertThatThrownBy(() -> new RagSearchSpec(
+                "test",
+                "knowledge_chunk",
+                "id",
+                "title",
+                "content",
+                "embedding",
+                "namespace",
+                "enabled",
+                "metadata",
+                Map.of("bad", "metadata ->> 'x'; drop table knowledge_chunk"),
+                null
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void shouldRenderVectorLiteral() {
         assertThat(VectorLiteral.from(new float[]{0.1F, 0.2F})).isEqualTo("[0.1,0.2]");
     }

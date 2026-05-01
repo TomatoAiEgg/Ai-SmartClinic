@@ -42,7 +42,7 @@ public record RagSearchSpec(
         }
         for (Map.Entry<String, String> entry : columns.entrySet()) {
             String key = requireText(entry.getKey(), "attribute key");
-            validated.put(key, SqlIdentifier.require(entry.getValue(), "attribute column " + key));
+            validated.put(key, SqlProjectionExpression.require(entry.getValue(), "attribute expression " + key));
         }
         return validated;
     }

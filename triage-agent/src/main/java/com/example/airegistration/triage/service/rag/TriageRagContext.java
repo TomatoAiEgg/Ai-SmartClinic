@@ -27,6 +27,10 @@ public record TriageRagContext(List<TriageKnowledgeHit> hits) {
         if (hit.getScore() < minScore) {
             return null;
         }
+        if (hit.getDepartmentCode() == null || hit.getDepartmentCode().isBlank()
+                || hit.getDepartmentName() == null || hit.getDepartmentName().isBlank()) {
+            return null;
+        }
         return new DepartmentSuggestion(
                 hit.getDepartmentCode(),
                 hit.getDepartmentName(),

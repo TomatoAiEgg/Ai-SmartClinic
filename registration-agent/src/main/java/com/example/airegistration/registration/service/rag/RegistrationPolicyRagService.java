@@ -26,8 +26,8 @@ public class RegistrationPolicyRagService {
 
     private static final RagSearchSpec SEARCH_SPEC = new RagSearchSpec(
             "registration-policy",
-            "registration_policy_chunk",
-            "policy_id",
+            "knowledge_chunk",
+            "id",
             "title",
             "content",
             "embedding",
@@ -35,16 +35,16 @@ public class RegistrationPolicyRagService {
             "enabled",
             "metadata",
             Map.of(
-                    "sourceId", "source_id",
-                    "sourceName", "source_name",
+                    "sourceId", "metadata ->> 'sourceId'",
+                    "sourceName", "metadata ->> 'sourceName'",
                     "documentId", "document_id",
-                    "policyType", "policy_type",
-                    "actionTag", "action_tag"
+                    "policyType", "metadata ->> 'policyType'",
+                    "actionTag", "metadata ->> 'actionTag'"
             ),
             List.of(
-                    "(action_tag = 'ALL' OR action_tag = :actionTag)",
-                    "(valid_from IS NULL OR valid_from <= CURRENT_DATE)",
-                    "(valid_to IS NULL OR valid_to >= CURRENT_DATE)"
+                    "(COALESCE(metadata ->> 'actionTag', 'ALL') = 'ALL' OR metadata ->> 'actionTag' = :actionTag)",
+                    "(NULLIF(metadata ->> 'validFrom', '') IS NULL OR NULLIF(metadata ->> 'validFrom', '')::date <= CURRENT_DATE)",
+                    "(NULLIF(metadata ->> 'validTo', '') IS NULL OR NULLIF(metadata ->> 'validTo', '')::date >= CURRENT_DATE)"
             )
     );
 
@@ -295,6 +295,6 @@ public class RegistrationPolicyRagService {
 
     private static String stringAttribute(RagSearchHit hit, String key) {
         Object value = hit.attributes().get(key);
-        return value == null ? null : String.valueOf(value);
+        return value == null ? "" : String.valueOf(value);
     }
 }
