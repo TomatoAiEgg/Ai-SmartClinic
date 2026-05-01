@@ -297,6 +297,7 @@ A2A 多 Agent
 - 各 agent 和 Nacos 示例的 embedding 默认值统一为 `text-embedding-v2`，避免未加载 env 时回退到不一致的 embedding 模型。
 - 增加统一 RAG schema 草案 `database/schema/2026-05-01-unified-rag-schema.sql`，包含 `knowledge_document`、`knowledge_chunk`、`knowledge_ingest_job`、`knowledge_retrieval_log`；`common-rag` 增加文档/chunk 导入服务、简单文本切片器和检索日志写入能力。
 - triage、guide、registration-policy 的在线检索规格切换到统一 `knowledge_chunk`，领域字段通过 `metadata` 投影读取；旧的三张专用知识表 Mapper 已移除，后续知识导入统一写入 `knowledge_document/knowledge_chunk`。
+- 新增 `knowledge-service`，提供 `/api/knowledge/ingest` 导入入口；请求可传显式 chunk，也可传原文由服务按配置切片，并统一调用 `common-rag` 写入 pgvector 知识库。
 
 ## 判断标准
 

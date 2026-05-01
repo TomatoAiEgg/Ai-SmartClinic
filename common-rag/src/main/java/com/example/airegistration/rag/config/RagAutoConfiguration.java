@@ -11,11 +11,13 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
-@AutoConfiguration
+@AutoConfiguration(after = {DataSourceAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
 @ConditionalOnClass(NamedParameterJdbcOperations.class)
 public class RagAutoConfiguration {
 
@@ -27,7 +29,7 @@ public class RagAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(NamedParameterJdbcOperations.class)
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
     public RagRetrievalLogRepository ragRetrievalLogRepository(NamedParameterJdbcOperations jdbcOperations,
                                                                ObjectMapper objectMapper) {
@@ -35,7 +37,7 @@ public class RagAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(NamedParameterJdbcOperations.class)
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
     public PgvectorRagSearchService pgvectorRagSearchService(NamedParameterJdbcOperations jdbcOperations,
                                                              ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,
@@ -44,7 +46,7 @@ public class RagAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(NamedParameterJdbcOperations.class)
+    @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
     public KnowledgeIngestService knowledgeIngestService(NamedParameterJdbcOperations jdbcOperations,
                                                          ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,

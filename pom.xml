@@ -62,6 +62,7 @@
         <module>common-ai</module>
         <module>common-rag</module>
         <module>common-agent</module>
+        <module>knowledge-service</module>
         <module>gateway-chat-service</module>
         <module>supervisor-agent</module>
         <module>triage-agent</module>

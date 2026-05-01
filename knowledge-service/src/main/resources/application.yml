@@ -1,0 +1,72 @@
+server:
+  port: 10084
+
+spring:
+  application:
+    name: knowledge-service
+  config:
+    import:
+      - optional:nacos:ai-smartclinic-common.yml
+      - optional:nacos:${spring.application.name}.yml
+  cloud:
+    nacos:
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        namespace: ${NACOS_CONFIG_NAMESPACE:${NACOS_NAMESPACE:}}
+        group: ${NACOS_CONFIG_GROUP:AI_SMARTCLINIC}
+        file-extension: yml
+        refresh-enabled: true
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:Ai-SmartClinic}?currentSchema=${POSTGRES_SCHEMA:ai_registration}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
+  ai:
+    model:
+      chat: none
+      embedding: dashscope
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      rerank: none
+      video: none
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      agent:
+        enabled: false
+      image:
+        enabled: false
+      chat:
+        enabled: false
+      embedding:
+        enabled: true
+        options:
+          model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v2}
+
+ai:
+  service:
+    model-router:
+      embedding:
+        default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v2}
+        dimensions: ${AI_EMBEDDING_DIMENSIONS:1024}
+        fallback-models:
+          - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v2}
+        fallback-enabled: true
+        exhausted-ttl: ${AI_EMBEDDING_EXHAUSTED_TTL:PT1H}
+        transient-retries: ${AI_EMBEDDING_TRANSIENT_RETRIES:1}
+
+app:
+  ai:
+    knowledge-ingest:
+      chunk-max-chars: ${APP_AI_KNOWLEDGE_INGEST_CHUNK_MAX_CHARS:900}
+      chunk-overlap-chars: ${APP_AI_KNOWLEDGE_INGEST_CHUNK_OVERLAP_CHARS:120}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
