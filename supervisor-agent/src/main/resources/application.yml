@@ -64,6 +64,9 @@ ai:
         transient-retries: ${AI_EMBEDDING_TRANSIENT_RETRIES:1}
 
 app:
+  ai:
+    supervisor-routing:
+      llm-enabled: ${APP_AI_SUPERVISOR_ROUTING_LLM_ENABLED:true}
   agents:
     triage:
       base-url: ${TRIAGE_AGENT_BASE_URL:http://localhost:10081}

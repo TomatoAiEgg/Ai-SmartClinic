@@ -7,6 +7,5 @@ logs/
 .ai/
 .playwright-mcp/
 frontend-miniapp/.logs/
-com/
 .runtime-logs/
 .env

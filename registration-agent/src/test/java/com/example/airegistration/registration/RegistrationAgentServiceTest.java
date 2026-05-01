@@ -16,12 +16,12 @@ import com.example.airegistration.registration.service.RegistrationFlowPolicy;
 import com.example.airegistration.registration.service.RegistrationIntentClassifier;
 import com.example.airegistration.registration.service.RegistrationReplyService;
 import com.example.airegistration.registration.service.RegistrationSlotExtractor;
+import com.example.airegistration.registration.service.rag.RegistrationPolicyRagService;
 import com.example.airegistration.registration.service.rag.RegistrationRuleService;
 import com.example.airegistration.registration.service.orchestrator.RegistrationOrchestratorService;
 import com.example.airegistration.registration.service.tool.RegistrationToolService;
 import com.example.airegistration.registration.service.workflow.RegistrationWorkflowService;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -76,9 +76,9 @@ class RegistrationAgentServiceTest {
                         "AI generated reply",
                         invocation.getArgument(2),
                         Map.copyOf(invocation.getArgument(3))
-                )));
+        )));
         confirmationService = new TestRegistrationConfirmationService();
-        RegistrationRuleService ruleService = new RegistrationRuleService(new ObjectMapper());
+        RegistrationRuleService ruleService = new RegistrationRuleService((RegistrationPolicyRagService) null);
         RegistrationToolService toolService = new RegistrationToolService(flowPolicy, gateway, confirmationService);
         RegistrationWorkflowService workflowService =
                 new RegistrationWorkflowService(flowPolicy, replyService, ruleService, toolService);

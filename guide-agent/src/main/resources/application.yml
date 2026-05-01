@@ -19,6 +19,11 @@ spring:
         group: ${NACOS_CONFIG_GROUP:AI_SMARTCLINIC}
         file-extension: yml
         refresh-enabled: true
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:Ai-SmartClinic}?currentSchema=${POSTGRES_SCHEMA:ai_registration}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
   ai:
     model:
       chat: dashscope
@@ -57,11 +62,20 @@ ai:
         transient-retries: ${AI_CHAT_TRANSIENT_RETRIES:1}
       embedding:
         default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+        dimensions: ${AI_EMBEDDING_DIMENSIONS:1024}
         fallback-models:
           - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v3}
         fallback-enabled: true
         exhausted-ttl: ${AI_EMBEDDING_EXHAUSTED_TTL:PT1H}
         transient-retries: ${AI_EMBEDDING_TRANSIENT_RETRIES:1}
+
+app:
+  ai:
+    guide-rag:
+      enabled: ${APP_AI_GUIDE_RAG_ENABLED:true}
+      namespace: ${APP_AI_GUIDE_RAG_NAMESPACE:default-guide-knowledge}
+      top-k: ${APP_AI_GUIDE_RAG_TOP_K:3}
+      min-score: ${APP_AI_GUIDE_RAG_MIN_SCORE:0.55}
 
 management:
   endpoints:

@@ -26,6 +26,11 @@ spring:
       password: ${REDIS_PASSWORD:123456}
       database: ${SPRING_DATA_REDIS_DATABASE:0}
       timeout: 5s
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DATABASE:Ai-SmartClinic}?currentSchema=${POSTGRES_SCHEMA:ai_registration}
+    username: ${POSTGRES_USERNAME:postgres}
+    password: ${POSTGRES_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
   ai:
     model:
       chat: dashscope
@@ -64,6 +69,7 @@ ai:
         transient-retries: ${AI_CHAT_TRANSIENT_RETRIES:1}
       embedding:
         default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+        dimensions: ${AI_EMBEDDING_DIMENSIONS:1024}
         fallback-models:
           - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v3}
         fallback-enabled: true
@@ -76,6 +82,11 @@ app:
   ai:
     registration-intent:
       llm-enabled: ${REGISTRATION_INTENT_LLM_ENABLED:true}
+    registration-policy-rag:
+      enabled: ${APP_AI_REGISTRATION_POLICY_RAG_ENABLED:true}
+      namespace: ${APP_AI_REGISTRATION_POLICY_RAG_NAMESPACE:default-registration-policy}
+      top-k: ${APP_AI_REGISTRATION_POLICY_RAG_TOP_K:4}
+      min-score: ${APP_AI_REGISTRATION_POLICY_RAG_MIN_SCORE:0.55}
   mcp:
     patient:
       base-url: ${PATIENT_MCP_BASE_URL:http://localhost:10101}
