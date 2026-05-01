@@ -60,6 +60,7 @@
     <modules>
         <module>common-domain</module>
         <module>common-ai</module>
+        <module>common-rag</module>
         <module>common-agent</module>
         <module>gateway-chat-service</module>
         <module>supervisor-agent</module>

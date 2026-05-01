@@ -292,6 +292,10 @@ A2A 多 Agent
 - Embedding 配置保留 `text-embedding-v2` 和 `1024` 维，当前 pgvector 知识表也是 `vector(1024)`。
 - supervisor-agent 增加第一版编排能力：当用户请求同时包含症状描述和挂号意图时，先调用 triage-agent 获取科室建议，再把 `departmentCode`、`departmentName`、`triageReason` 等上下文透传给 registration-agent 继续挂号预览。
 - 该编排仍保持业务事实边界：科室建议来自 triage-agent，真实号源、就诊人和挂号预览仍由 registration-agent 通过 MCP/PostgreSQL 决定。
+- 增加 `common-rag` 基础模块，统一 embedding、pgvector topK 检索、检索状态和检索日志；triage、guide、registration-policy 的 RAG 检索先接入公共检索服务，现有知识表暂不迁移。
+- 增加 `common-agent` 内部协议基础类型：`AgentRequestEnvelope`、`AgentResponseEnvelope`、`AgentExecutionMeta`、`AgentCapability`，作为后续 A2A-lite 标准化的前置结构。
+- 各 agent 和 Nacos 示例的 embedding 默认值统一为 `text-embedding-v2`，避免未加载 env 时回退到不一致的 embedding 模型。
+- 增加统一 RAG schema 草案 `database/schema/2026-05-01-unified-rag-schema.sql`，包含 `knowledge_document`、`knowledge_chunk`、`knowledge_ingest_job`、`knowledge_retrieval_log`；`common-rag` 增加文档/chunk 导入服务、简单文本切片器和检索日志写入能力。
 
 ## 判断标准
 

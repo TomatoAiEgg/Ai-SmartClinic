@@ -1,35 +1,34 @@
 package com.example.airegistration.guide.service.rag;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.example.airegistration.ai.service.FallbackEmbeddingClient;
 import com.example.airegistration.dto.ChatRequest;
+import com.example.airegistration.rag.core.RagRetrievalStatus;
+import com.example.airegistration.rag.core.RagSearchHit;
+import com.example.airegistration.rag.core.RagSearchRequest;
+import com.example.airegistration.rag.core.RagSearchResult;
+import com.example.airegistration.rag.core.RagSearchSpec;
+import com.example.airegistration.rag.service.PgvectorRagSearchService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.ObjectProvider;
 
 class GuideRagServiceTest {
 
     @Test
     void shouldRetrieveGuideKnowledgeFromPgvector() {
-        GuideKnowledgeMapper mapper = mock(GuideKnowledgeMapper.class);
-        FallbackEmbeddingClient embeddingClient = mock(FallbackEmbeddingClient.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<FallbackEmbeddingClient> provider = mock(ObjectProvider.class);
-        when(provider.getIfAvailable()).thenReturn(embeddingClient);
-        when(embeddingClient.embed("医保材料需要带什么？")).thenReturn(new float[]{0.1F, 0.2F});
-        when(mapper.search("test-guide", "[0.1,0.2]", 3, 0.55D)).thenReturn(List.of(hit()));
+        PgvectorRagSearchService searchService = mock(PgvectorRagSearchService.class);
+        when(searchService.search(any(RagSearchSpec.class), any(RagSearchRequest.class))).thenReturn(result(hit()));
 
         GuideRagService service = new GuideRagService(
-                mapper,
-                provider,
+                searchService,
                 new ObjectMapper(),
                 true,
                 "test-guide",
@@ -51,21 +50,17 @@ class GuideRagServiceTest {
         @SuppressWarnings("unchecked")
         List<String> citations = (List<String>) context.get("citations");
         assertThat(citations).containsExactly("guide-official-001");
-        verify(mapper).search(eq("test-guide"), eq("[0.1,0.2]"), eq(3), eq(0.55D));
+        verify(searchService).search(any(RagSearchSpec.class), any(RagSearchRequest.class));
     }
 
     @Test
-    void shouldReturnEmptyContextWhenEmbeddingClientIsUnavailable() {
-        GuideKnowledgeMapper mapper = mock(GuideKnowledgeMapper.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<FallbackEmbeddingClient> provider = mock(ObjectProvider.class);
-        when(provider.getIfAvailable()).thenReturn(null);
+    void shouldReturnEmptyContextWhenDisabled() {
+        PgvectorRagSearchService searchService = mock(PgvectorRagSearchService.class);
 
         GuideRagService service = new GuideRagService(
-                mapper,
-                provider,
+                searchService,
                 new ObjectMapper(),
-                true,
+                false,
                 "test-guide",
                 3,
                 0.55D
@@ -80,19 +75,33 @@ class GuideRagServiceTest {
 
         assertThat(context).containsEntry("matchCount", 0);
         assertThat(context.get("referenceText").toString()).contains("未检索到");
-        verifyNoInteractions(mapper);
+        verifyNoInteractions(searchService);
     }
 
-    private GuideKnowledgeHit hit() {
-        GuideKnowledgeHit hit = new GuideKnowledgeHit();
-        hit.setCitationId("guide-official-001");
-        hit.setSourceId("official-guide");
-        hit.setSourceName("官方导诊知识");
-        hit.setDocumentId("doc-001");
-        hit.setTitle("医保材料");
-        hit.setContent("医保就诊通常需要准备身份证件和医保电子凭证。");
-        hit.setMetadataJson("{\"sourceType\":\"official_notice\"}");
-        hit.setScore(0.88D);
-        return hit;
+    private RagSearchResult result(RagSearchHit hit) {
+        return new RagSearchResult(
+                "guide-knowledge",
+                "test-guide",
+                "医保材料需要带什么？",
+                RagRetrievalStatus.HIT,
+                List.of(hit),
+                Duration.ofMillis(12),
+                null
+        );
+    }
+
+    private RagSearchHit hit() {
+        return new RagSearchHit(
+                "guide-official-001",
+                "医保材料",
+                "医保就诊通常需要准备身份证件和医保电子凭证。",
+                "{\"sourceType\":\"official_notice\"}",
+                0.88D,
+                Map.of(
+                        "sourceId", "official-guide",
+                        "sourceName", "官方导诊知识",
+                        "documentId", "doc-001"
+                )
+        );
     }
 }

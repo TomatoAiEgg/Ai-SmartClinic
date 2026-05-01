@@ -1,7 +1,11 @@
 package com.example.airegistration.registration.service.rag;
 
-import com.example.airegistration.ai.service.FallbackEmbeddingClient;
 import com.example.airegistration.dto.ChatRequest;
+import com.example.airegistration.rag.core.RagSearchHit;
+import com.example.airegistration.rag.core.RagSearchRequest;
+import com.example.airegistration.rag.core.RagSearchResult;
+import com.example.airegistration.rag.core.RagSearchSpec;
+import com.example.airegistration.rag.service.PgvectorRagSearchService;
 import com.example.airegistration.registration.enums.RegistrationIntent;
 import com.example.airegistration.registration.enums.RegistrationReplyScene;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -12,7 +16,6 @@ import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,23 +24,44 @@ public class RegistrationPolicyRagService {
 
     private static final Logger log = LoggerFactory.getLogger(RegistrationPolicyRagService.class);
 
-    private final RegistrationPolicyMapper mapper;
-    private final ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider;
+    private static final RagSearchSpec SEARCH_SPEC = new RagSearchSpec(
+            "registration-policy",
+            "registration_policy_chunk",
+            "policy_id",
+            "title",
+            "content",
+            "embedding",
+            "namespace",
+            "enabled",
+            "metadata",
+            Map.of(
+                    "sourceId", "source_id",
+                    "sourceName", "source_name",
+                    "documentId", "document_id",
+                    "policyType", "policy_type",
+                    "actionTag", "action_tag"
+            ),
+            List.of(
+                    "(action_tag = 'ALL' OR action_tag = :actionTag)",
+                    "(valid_from IS NULL OR valid_from <= CURRENT_DATE)",
+                    "(valid_to IS NULL OR valid_to >= CURRENT_DATE)"
+            )
+    );
+
+    private final PgvectorRagSearchService ragSearchService;
     private final ObjectMapper objectMapper;
     private final boolean enabled;
     private final String namespace;
     private final int topK;
     private final double minScore;
 
-    public RegistrationPolicyRagService(RegistrationPolicyMapper mapper,
-                                        ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,
+    public RegistrationPolicyRagService(PgvectorRagSearchService ragSearchService,
                                         ObjectMapper objectMapper,
                                         @Value("${app.ai.registration-policy-rag.enabled:true}") boolean enabled,
                                         @Value("${app.ai.registration-policy-rag.namespace:default-registration-policy}") String namespace,
                                         @Value("${app.ai.registration-policy-rag.top-k:4}") int topK,
                                         @Value("${app.ai.registration-policy-rag.min-score:0.55}") double minScore) {
-        this.mapper = mapper;
-        this.embeddingClientProvider = embeddingClientProvider;
+        this.ragSearchService = ragSearchService;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.namespace = namespace;
@@ -55,17 +79,19 @@ public class RegistrationPolicyRagService {
             return emptyContext(query, actionTag);
         }
 
-        FallbackEmbeddingClient embeddingClient = embeddingClientProvider.getIfAvailable();
-        if (embeddingClient == null) {
-            log.info("[registration-policy-rag] embedding client unavailable trace_id={} chat_id={}",
-                    request.traceId(),
-                    request.chatId());
-            return emptyContext(query, actionTag);
-        }
-
         try {
-            String queryEmbedding = toVectorLiteral(embeddingClient.embed(query));
-            List<RegistrationPolicyHit> hits = mapper.search(namespace, actionTag, queryEmbedding, topK, minScore);
+            RagSearchResult result = ragSearchService.search(SEARCH_SPEC, new RagSearchRequest(
+                    request.traceId(),
+                    request.chatId(),
+                    namespace,
+                    query,
+                    topK,
+                    minScore,
+                    Map.of("actionTag", actionTag)
+            ));
+            List<RegistrationPolicyHit> hits = result.hits().stream()
+                    .map(RegistrationPolicyRagService::toPolicyHit)
+                    .toList();
             RegistrationPolicyHit best = hits.isEmpty() ? null : hits.get(0);
             log.info("[registration-policy-rag] retrieval completed trace_id={} chat_id={} namespace={} action_tag={} top_k={} min_score={} hit_count={} best_policy={} best_score={}",
                     request.traceId(),
@@ -252,15 +278,23 @@ public class RegistrationPolicyRagService {
         }
     }
 
-    private String toVectorLiteral(float[] embedding) {
-        StringBuilder builder = new StringBuilder("[");
-        for (int index = 0; index < embedding.length; index++) {
-            if (index > 0) {
-                builder.append(',');
-            }
-            builder.append(embedding[index]);
-        }
-        builder.append(']');
-        return builder.toString();
+    private static RegistrationPolicyHit toPolicyHit(RagSearchHit hit) {
+        RegistrationPolicyHit policyHit = new RegistrationPolicyHit();
+        policyHit.setPolicyId(hit.id());
+        policyHit.setTitle(hit.title());
+        policyHit.setContent(hit.content());
+        policyHit.setMetadataJson(hit.metadataJson());
+        policyHit.setScore(hit.score());
+        policyHit.setSourceId(stringAttribute(hit, "sourceId"));
+        policyHit.setSourceName(stringAttribute(hit, "sourceName"));
+        policyHit.setDocumentId(stringAttribute(hit, "documentId"));
+        policyHit.setPolicyType(stringAttribute(hit, "policyType"));
+        policyHit.setActionTag(stringAttribute(hit, "actionTag"));
+        return policyHit;
+    }
+
+    private static String stringAttribute(RagSearchHit hit, String key) {
+        Object value = hit.attributes().get(key);
+        return value == null ? null : String.valueOf(value);
     }
 }

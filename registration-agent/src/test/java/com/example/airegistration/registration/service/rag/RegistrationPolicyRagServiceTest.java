@@ -1,36 +1,35 @@
 package com.example.airegistration.registration.service.rag;
 
-import com.example.airegistration.ai.service.FallbackEmbeddingClient;
-import com.example.airegistration.dto.ChatRequest;
-import com.example.airegistration.registration.enums.RegistrationReplyScene;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.List;
-import java.util.Map;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.ObjectProvider;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.example.airegistration.dto.ChatRequest;
+import com.example.airegistration.rag.core.RagRetrievalStatus;
+import com.example.airegistration.rag.core.RagSearchHit;
+import com.example.airegistration.rag.core.RagSearchRequest;
+import com.example.airegistration.rag.core.RagSearchResult;
+import com.example.airegistration.rag.core.RagSearchSpec;
+import com.example.airegistration.rag.service.PgvectorRagSearchService;
+import com.example.airegistration.registration.enums.RegistrationReplyScene;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
 class RegistrationPolicyRagServiceTest {
 
     @Test
     void shouldRetrieveRegistrationPolicyFromPgvector() {
-        RegistrationPolicyMapper mapper = mock(RegistrationPolicyMapper.class);
-        FallbackEmbeddingClient embeddingClient = mock(FallbackEmbeddingClient.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<FallbackEmbeddingClient> provider = mock(ObjectProvider.class);
-        when(provider.getIfAvailable()).thenReturn(embeddingClient);
-        when(embeddingClient.embed(org.mockito.ArgumentMatchers.anyString())).thenReturn(new float[]{0.1F, 0.2F});
-        when(mapper.search("test-policy", "CANCEL", "[0.1,0.2]", 4, 0.55D)).thenReturn(List.of(hit()));
+        PgvectorRagSearchService searchService = mock(PgvectorRagSearchService.class);
+        when(searchService.search(any(RagSearchSpec.class), any(RagSearchRequest.class))).thenReturn(result(hit()));
 
         RegistrationPolicyRagService service = new RegistrationPolicyRagService(
-                mapper,
-                provider,
+                searchService,
                 new ObjectMapper(),
                 true,
                 "test-policy",
@@ -60,21 +59,17 @@ class RegistrationPolicyRagServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> snippets = (List<Map<String, Object>>) context.get("snippets");
         assertThat(snippets.get(0).get("metadata")).isEqualTo(Map.of("sourceType", "policy"));
-        verify(mapper).search(eq("test-policy"), eq("CANCEL"), eq("[0.1,0.2]"), eq(4), eq(0.55D));
+        verify(searchService).search(any(RagSearchSpec.class), any(RagSearchRequest.class));
     }
 
     @Test
-    void shouldReturnEmptyContextWhenEmbeddingClientIsUnavailable() {
-        RegistrationPolicyMapper mapper = mock(RegistrationPolicyMapper.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<FallbackEmbeddingClient> provider = mock(ObjectProvider.class);
-        when(provider.getIfAvailable()).thenReturn(null);
+    void shouldReturnEmptyContextWhenDisabled() {
+        PgvectorRagSearchService searchService = mock(PgvectorRagSearchService.class);
 
         RegistrationPolicyRagService service = new RegistrationPolicyRagService(
-                mapper,
-                provider,
+                searchService,
                 new ObjectMapper(),
-                true,
+                false,
                 "test-policy",
                 4,
                 0.55D
@@ -93,21 +88,35 @@ class RegistrationPolicyRagServiceTest {
 
         assertThat(context).containsEntry("matchCount", 0);
         assertThat(context.get("referenceText").toString()).contains("No registration policy evidence");
-        verifyNoInteractions(mapper);
+        verifyNoInteractions(searchService);
     }
 
-    private RegistrationPolicyHit hit() {
-        RegistrationPolicyHit hit = new RegistrationPolicyHit();
-        hit.setPolicyId("policy-cancel-001");
-        hit.setSourceId("hospital-policy");
-        hit.setSourceName("Hospital policy");
-        hit.setDocumentId("doc-001");
-        hit.setPolicyType("cancel");
-        hit.setActionTag("CANCEL");
-        hit.setTitle("Cancel policy");
-        hit.setContent("Cancellation must be confirmed before execution.");
-        hit.setMetadataJson("{\"sourceType\":\"policy\"}");
-        hit.setScore(0.91D);
-        return hit;
+    private RagSearchResult result(RagSearchHit hit) {
+        return new RagSearchResult(
+                "registration-policy",
+                "test-policy",
+                "cancel my appointment",
+                RagRetrievalStatus.HIT,
+                List.of(hit),
+                Duration.ofMillis(12),
+                null
+        );
+    }
+
+    private RagSearchHit hit() {
+        return new RagSearchHit(
+                "policy-cancel-001",
+                "Cancel policy",
+                "Cancellation must be confirmed before execution.",
+                "{\"sourceType\":\"policy\"}",
+                0.91D,
+                Map.of(
+                        "sourceId", "hospital-policy",
+                        "sourceName", "Hospital policy",
+                        "documentId", "doc-001",
+                        "policyType", "cancel",
+                        "actionTag", "CANCEL"
+                )
+        );
     }
 }

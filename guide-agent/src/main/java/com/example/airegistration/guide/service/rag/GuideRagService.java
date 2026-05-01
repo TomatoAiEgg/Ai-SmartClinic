@@ -1,7 +1,11 @@
 package com.example.airegistration.guide.service.rag;
 
-import com.example.airegistration.ai.service.FallbackEmbeddingClient;
 import com.example.airegistration.dto.ChatRequest;
+import com.example.airegistration.rag.core.RagSearchHit;
+import com.example.airegistration.rag.core.RagSearchRequest;
+import com.example.airegistration.rag.core.RagSearchResult;
+import com.example.airegistration.rag.core.RagSearchSpec;
+import com.example.airegistration.rag.service.PgvectorRagSearchService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
@@ -9,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -18,23 +21,38 @@ public class GuideRagService {
 
     private static final Logger log = LoggerFactory.getLogger(GuideRagService.class);
 
-    private final GuideKnowledgeMapper mapper;
-    private final ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider;
+    private static final RagSearchSpec SEARCH_SPEC = new RagSearchSpec(
+            "guide-knowledge",
+            "guide_knowledge_chunk",
+            "citation_id",
+            "title",
+            "content",
+            "embedding",
+            "namespace",
+            "enabled",
+            "metadata",
+            Map.of(
+                    "sourceId", "source_id",
+                    "sourceName", "source_name",
+                    "documentId", "document_id"
+            ),
+            null
+    );
+
+    private final PgvectorRagSearchService ragSearchService;
     private final ObjectMapper objectMapper;
     private final String namespace;
     private final int topK;
     private final double minScore;
     private final boolean enabled;
 
-    public GuideRagService(GuideKnowledgeMapper mapper,
-                           ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,
+    public GuideRagService(PgvectorRagSearchService ragSearchService,
                            ObjectMapper objectMapper,
                            @Value("${app.ai.guide-rag.enabled:true}") boolean enabled,
                            @Value("${app.ai.guide-rag.namespace:default-guide-knowledge}") String namespace,
                            @Value("${app.ai.guide-rag.top-k:3}") int topK,
                            @Value("${app.ai.guide-rag.min-score:0.55}") double minScore) {
-        this.mapper = mapper;
-        this.embeddingClientProvider = embeddingClientProvider;
+        this.ragSearchService = ragSearchService;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.namespace = namespace;
@@ -48,17 +66,19 @@ public class GuideRagService {
             return emptyContext(query);
         }
 
-        FallbackEmbeddingClient embeddingClient = embeddingClientProvider.getIfAvailable();
-        if (embeddingClient == null) {
-            log.info("[guide-rag] embedding client unavailable trace_id={} chat_id={}",
-                    request.traceId(),
-                    request.chatId());
-            return emptyContext(query);
-        }
-
         try {
-            String queryEmbedding = toVectorLiteral(embeddingClient.embed(query));
-            List<GuideKnowledgeHit> hits = mapper.search(namespace, queryEmbedding, topK, minScore);
+            RagSearchResult result = ragSearchService.search(SEARCH_SPEC, new RagSearchRequest(
+                    request.traceId(),
+                    request.chatId(),
+                    namespace,
+                    query,
+                    topK,
+                    minScore,
+                    Map.of()
+            ));
+            List<GuideKnowledgeHit> hits = result.hits().stream()
+                    .map(GuideRagService::toGuideHit)
+                    .toList();
             GuideKnowledgeHit best = hits.isEmpty() ? null : hits.get(0);
             log.info("[guide-rag] retrieval completed trace_id={} chat_id={} namespace={} top_k={} min_score={} hit_count={} best_citation={} best_score={}",
                     request.traceId(),
@@ -161,15 +181,21 @@ public class GuideRagService {
         }
     }
 
-    private String toVectorLiteral(float[] embedding) {
-        StringBuilder builder = new StringBuilder("[");
-        for (int index = 0; index < embedding.length; index++) {
-            if (index > 0) {
-                builder.append(',');
-            }
-            builder.append(embedding[index]);
-        }
-        builder.append(']');
-        return builder.toString();
+    private static GuideKnowledgeHit toGuideHit(RagSearchHit hit) {
+        GuideKnowledgeHit guideHit = new GuideKnowledgeHit();
+        guideHit.setCitationId(hit.id());
+        guideHit.setTitle(hit.title());
+        guideHit.setContent(hit.content());
+        guideHit.setMetadataJson(hit.metadataJson());
+        guideHit.setScore(hit.score());
+        guideHit.setSourceId(stringAttribute(hit, "sourceId"));
+        guideHit.setSourceName(stringAttribute(hit, "sourceName"));
+        guideHit.setDocumentId(stringAttribute(hit, "documentId"));
+        return guideHit;
+    }
+
+    private static String stringAttribute(RagSearchHit hit, String key) {
+        Object value = hit.attributes().get(key);
+        return value == null ? null : String.valueOf(value);
     }
 }

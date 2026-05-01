@@ -42,7 +42,7 @@ spring:
       embedding:
         enabled: true
         options:
-          model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+          model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v2}
 
 ai:
   service:
@@ -56,9 +56,9 @@ ai:
         exhausted-ttl: ${AI_CHAT_EXHAUSTED_TTL:PT1H}
         transient-retries: ${AI_CHAT_TRANSIENT_RETRIES:1}
       embedding:
-        default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v4}
+        default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v2}
         fallback-models:
-          - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v3}
+          - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v2}
         fallback-enabled: true
         exhausted-ttl: ${AI_EMBEDDING_EXHAUSTED_TTL:PT1H}
         transient-retries: ${AI_EMBEDDING_TRANSIENT_RETRIES:1}
