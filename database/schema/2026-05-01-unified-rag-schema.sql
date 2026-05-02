@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS knowledge_chunk (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     embedding_model VARCHAR(120) NOT NULL,
     embedding_dimensions INTEGER NOT NULL,
-    embedding vector(1024) NOT NULL,
+    embedding vector(1536) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -62,7 +62,7 @@ ai:
         transient-retries: ${AI_CHAT_TRANSIENT_RETRIES:1}
       embedding:
         default-model: ${AI_EMBEDDING_DEFAULT_MODEL:text-embedding-v2}
-        dimensions: ${AI_EMBEDDING_DIMENSIONS:1024}
+        dimensions: ${AI_EMBEDDING_DIMENSIONS:1536}
         fallback-models:
           - ${AI_EMBEDDING_FALLBACK_MODEL_1:text-embedding-v2}
         fallback-enabled: true

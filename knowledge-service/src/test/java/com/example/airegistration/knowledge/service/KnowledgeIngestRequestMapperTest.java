@@ -48,7 +48,7 @@ class KnowledgeIngestRequestMapperTest {
         KnowledgeIngestRequest core = mapper.toCoreRequest(request);
 
         assertThat(core.embeddingModel()).isEqualTo("text-embedding-v2");
-        assertThat(core.embeddingDimensions()).isEqualTo(1024);
+        assertThat(core.embeddingDimensions()).isEqualTo(1536);
         assertThat(core.metadata()).containsEntry("operator", "seed");
         assertThat(core.documents()).hasSize(1);
         assertThat(core.documents().get(0).chunks()).isNotEmpty();
@@ -133,7 +133,7 @@ class KnowledgeIngestRequestMapperTest {
     private static AiModelFallbackProperties modelProperties() {
         AiModelRouteProperties embedding = new AiModelRouteProperties();
         embedding.setDefaultModel("text-embedding-v2");
-        embedding.setDimensions(1024);
+        embedding.setDimensions(1536);
         AiModelFallbackProperties properties = new AiModelFallbackProperties();
         properties.setEmbedding(embedding);
         return properties;

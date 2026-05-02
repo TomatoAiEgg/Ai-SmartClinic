@@ -289,7 +289,7 @@ A2A 多 Agent
 ### 2026-05-01
 
 - 聊天模型配置恢复为阿里 DashScope `qwen-plus`，小米 MiMo 暂不接入主链路。
-- Embedding 配置保留 `text-embedding-v2` 和 `1024` 维，当前 pgvector 知识表也是 `vector(1024)`。
+- Embedding 配置保留 `text-embedding-v2`，实测 DashScope 返回 1536 维，当前 pgvector 统一知识表使用 `vector(1536)`。
 - supervisor-agent 增加第一版编排能力：当用户请求同时包含症状描述和挂号意图时，先调用 triage-agent 获取科室建议，再把 `departmentCode`、`departmentName`、`triageReason` 等上下文透传给 registration-agent 继续挂号预览。
 - 该编排仍保持业务事实边界：科室建议来自 triage-agent，真实号源、就诊人和挂号预览仍由 registration-agent 通过 MCP/PostgreSQL 决定。
 - 增加 `common-rag` 基础模块，统一 embedding、pgvector topK 检索、检索状态和检索日志；triage、guide、registration-policy 的 RAG 检索已接入公共检索服务。
