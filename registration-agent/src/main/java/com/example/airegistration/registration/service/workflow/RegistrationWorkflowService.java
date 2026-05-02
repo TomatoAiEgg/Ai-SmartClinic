@@ -241,6 +241,7 @@ public class RegistrationWorkflowService {
                 isConfirming(request));
         RegistrationWorkflowRules workflowRules =
                 registrationRuleService.resolveWorkflowRules(request, RegistrationIntent.CANCEL, Map.of("action", "cancel"));
+        RegistrationWorkflowCheckpoint checkpoint = workflowRuntime.start(request, RegistrationIntent.CANCEL);
         if (isConfirming(request)) {
             return confirmCancelRegistration(request)
                     .onErrorResume(ex -> toErrorResponse(request, ex, "cancel"));
@@ -248,22 +249,36 @@ public class RegistrationWorkflowService {
 
         String registrationId = flowPolicy.extractRegistrationId(request);
         if (workflowRules.requireRegistrationId() && flowPolicy.isBlank(registrationId)) {
-            return replyService.reply(request, RegistrationReplyScene.CANCEL_MISSING_ID, false,
-                    Map.of("action", "cancel", "requiredField", "registrationId"));
+            RegistrationWorkflowCheckpoint blockedCheckpoint = checkpoint.advance(
+                    "extract_slots",
+                    "reply",
+                    "BLOCKED",
+                    Map.of("missingFields", "registrationId")
+            );
+            return workflowRuntime.record(request, blockedCheckpoint)
+                    .then(replyService.reply(request, RegistrationReplyScene.CANCEL_MISSING_ID, false,
+                            Map.of(
+                                    "action", "cancel",
+                                    "requiredField", "registrationId",
+                                    "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                            )));
         }
 
         return registrationToolService.queryRegistrationResult(request.traceId(), registrationId, request.userId())
                 .flatMap(existing -> {
                     if (RegistrationStatus.CANCELLED.matches(existing.status())) {
+                        RegistrationWorkflowCheckpoint blockedCheckpoint = cancelPreviewCheckpoint(checkpoint, existing)
+                                .advance("query_order", "reply", "BLOCKED", Map.of("status", existing.status()));
                         return replyService.reply(request, RegistrationReplyScene.CANCEL_ALREADY_CANCELLED, false,
                                 Map.of(
                                         "action", "cancel",
                                         "registrationId", existing.registrationId(),
-                                        "status", existing.status()
-                                ));
+                                        "status", existing.status(),
+                                        "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                                )).delayUntil(response -> workflowRuntime.record(request, blockedCheckpoint));
                     }
                     if (requiresPreviewBeforeWrite(request, RegistrationIntent.CANCEL, workflowRules)) {
-                        return buildCancelPreviewResponse(request, existing);
+                        return buildCancelPreviewResponse(request, existing, cancelPreviewCheckpoint(checkpoint, existing));
                     }
 
                     RegistrationCancelRequest cancelRequest = new RegistrationCancelRequest(
@@ -293,17 +308,27 @@ public class RegistrationWorkflowService {
                             request.traceId(),
                             request.chatId(),
                             context.confirmationId());
-                    String registrationId = requireString(context.data(), "registrationId");
+                    RegistrationWorkflowCheckpoint resumedCheckpoint =
+                            workflowRuntime.resume(request, context.checkpoint(), "execute_write");
+                    String registrationId = requireString(resumeData(context), "registrationId");
 
-                    return registrationToolService.queryRegistrationResult(request.traceId(), registrationId, request.userId())
+                    return workflowRuntime.record(request, resumedCheckpoint)
+                            .then(registrationToolService.queryRegistrationResult(request.traceId(), registrationId, request.userId()))
                             .flatMap(existing -> {
                                 if (RegistrationStatus.CANCELLED.matches(existing.status())) {
+                                    RegistrationWorkflowCheckpoint blockedCheckpoint = resumedCheckpoint.advance(
+                                            "execute_write",
+                                            "reply",
+                                            "BLOCKED",
+                                            Map.of("status", existing.status())
+                                    );
                                     return replyService.reply(request, RegistrationReplyScene.CANCEL_ALREADY_CANCELLED, false,
                                             Map.of(
                                                     "action", "cancel",
                                                     "registrationId", existing.registrationId(),
-                                                    "status", existing.status()
-                                            ));
+                                                    "status", existing.status(),
+                                                    "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                                            )).delayUntil(response -> workflowRuntime.record(request, blockedCheckpoint));
                                 }
 
                                 RegistrationCancelRequest cancelRequest = new RegistrationCancelRequest(
@@ -315,7 +340,21 @@ public class RegistrationWorkflowService {
 
                                 return registrationToolService.cancelRegistration(request.traceId(), cancelRequest)
                                         .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), toSlotRequest(existing))
-                                                .flatMap(ignored -> toResultResponse(request, result, RegistrationReplyScene.CANCEL_RESULT))
+                                                .flatMap(ignored -> {
+                                                    RegistrationWorkflowCheckpoint completedCheckpoint = resumedCheckpoint.advance(
+                                                            "execute_write",
+                                                            "reply",
+                                                            "SUCCEEDED",
+                                                            registrationResultData(result)
+                                                    );
+                                                    return workflowRuntime.record(request, completedCheckpoint)
+                                                            .then(toResultResponse(
+                                                                    request,
+                                                                    result,
+                                                                    Map.of("workflowTrace", workflowRuntime.traceData(completedCheckpoint)),
+                                                                    RegistrationReplyScene.CANCEL_RESULT
+                                                            ));
+                                                })
                                                 .onErrorResume(ex -> withWarning(
                                                         request,
                                                         result,
@@ -337,6 +376,7 @@ public class RegistrationWorkflowService {
                 RegistrationIntent.RESCHEDULE,
                 Map.of("action", "reschedule")
         );
+        RegistrationWorkflowCheckpoint checkpoint = workflowRuntime.start(request, RegistrationIntent.RESCHEDULE);
         if (isConfirming(request)) {
             return confirmRescheduleRegistration(request)
                     .onErrorResume(ex -> toErrorResponse(request, ex, "reschedule"));
@@ -344,31 +384,56 @@ public class RegistrationWorkflowService {
 
         String registrationId = flowPolicy.extractRegistrationId(request);
         if (workflowRules.requireRegistrationId() && flowPolicy.isBlank(registrationId)) {
-            return replyService.reply(request, RegistrationReplyScene.RESCHEDULE_MISSING_ID, false,
-                    Map.of("action", "reschedule", "requiredField", "registrationId"));
+            RegistrationWorkflowCheckpoint blockedCheckpoint = checkpoint.advance(
+                    "extract_slots",
+                    "reply",
+                    "BLOCKED",
+                    Map.of("missingFields", "registrationId")
+            );
+            return workflowRuntime.record(request, blockedCheckpoint)
+                    .then(replyService.reply(request, RegistrationReplyScene.RESCHEDULE_MISSING_ID, false,
+                            Map.of(
+                                    "action", "reschedule",
+                                    "requiredField", "registrationId",
+                                    "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                            )));
         }
 
         String clinicDate = flowPolicy.resolveClinicDate(request);
         String startTime = flowPolicy.resolveStartTime(request);
         List<String> missingFields = resolveMissingFields(request, workflowRules.rescheduleRequiredFields());
         if (!missingFields.isEmpty()) {
-            return replyService.reply(request, RegistrationReplyScene.RESCHEDULE_MISSING_TARGET_TIME, false,
-                    Map.of(
-                            "action", "reschedule",
-                            "registrationId", registrationId,
-                            "requiredFields", String.join(",", missingFields)
-                    ));
+            RegistrationWorkflowCheckpoint blockedCheckpoint = checkpoint.advance(
+                    "extract_slots",
+                    "reply",
+                    "BLOCKED",
+                    Map.of("missingFields", String.join(",", missingFields))
+            );
+            return workflowRuntime.record(request, blockedCheckpoint)
+                    .then(replyService.reply(request, RegistrationReplyScene.RESCHEDULE_MISSING_TARGET_TIME, false,
+                            Map.of(
+                                    "action", "reschedule",
+                                    "registrationId", registrationId,
+                                    "requiredFields", String.join(",", missingFields),
+                                    "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                            )));
         }
 
         return registrationToolService.queryRegistrationResult(request.traceId(), registrationId, request.userId())
                 .flatMap(existing -> {
                     if (RegistrationStatus.CANCELLED.matches(existing.status())) {
+                        RegistrationWorkflowCheckpoint blockedCheckpoint = orderCheckpoint(
+                                checkpoint,
+                                existing,
+                                "build_preview"
+                        ).advance("query_order", "reply", "BLOCKED", Map.of("status", existing.status()));
                         return replyService.reply(request, RegistrationReplyScene.RESCHEDULE_CANCELLED_RECORD, false,
                                 Map.of(
                                         "action", "reschedule",
                                         "registrationId", existing.registrationId(),
-                                        "status", existing.status()
-                                ));
+                                        "status", existing.status(),
+                                        "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                                )).delayUntil(response -> workflowRuntime.record(request, blockedCheckpoint));
                     }
 
                     ScheduleSlotRequest targetSlotRequest =
@@ -387,7 +452,12 @@ public class RegistrationWorkflowService {
                     return registrationToolService.resolveSlot(request.traceId(), targetSlotRequest)
                             .flatMap(targetSlot -> {
                                 if (requiresPreviewBeforeWrite(request, RegistrationIntent.RESCHEDULE, workflowRules)) {
-                                    return buildReschedulePreviewResponse(request, existing, targetSlot);
+                                    return buildReschedulePreviewResponse(
+                                            request,
+                                            existing,
+                                            targetSlot,
+                                            reschedulePreviewCheckpoint(checkpoint, existing, targetSlot)
+                                    );
                                 }
 
                                 RegistrationRescheduleRequest rescheduleRequest = new RegistrationRescheduleRequest(
@@ -421,12 +491,15 @@ public class RegistrationWorkflowService {
                             request.traceId(),
                             request.chatId(),
                             context.confirmationId());
-                    Map<String, Object> data = context.data();
+                    RegistrationWorkflowCheckpoint resumedCheckpoint =
+                            workflowRuntime.resume(request, context.checkpoint(), "execute_write");
+                    Map<String, Object> data = resumeData(context);
                     String registrationId = requireString(data, "registrationId");
                     String clinicDate = requireString(data, "clinicDate");
                     String startTime = requireString(data, "startTime");
 
-                    return registrationToolService.queryRegistrationResult(request.traceId(), registrationId, request.userId())
+                    return workflowRuntime.record(request, resumedCheckpoint)
+                            .then(registrationToolService.queryRegistrationResult(request.traceId(), registrationId, request.userId()))
                             .flatMap(existing -> {
                                 RegistrationWorkflowRules workflowRules = registrationRuleService.resolveWorkflowRules(
                                         request,
@@ -434,24 +507,38 @@ public class RegistrationWorkflowService {
                                         data
                                 );
                                 if (RegistrationStatus.CANCELLED.matches(existing.status())) {
+                                    RegistrationWorkflowCheckpoint blockedCheckpoint = resumedCheckpoint.advance(
+                                            "execute_write",
+                                            "reply",
+                                            "BLOCKED",
+                                            Map.of("status", existing.status())
+                                    );
                                     return replyService.reply(request, RegistrationReplyScene.RESCHEDULE_CANCELLED_RECORD, false,
                                             Map.of(
                                                     "action", "reschedule",
                                                     "registrationId", existing.registrationId(),
-                                                    "status", existing.status()
-                                            ));
+                                                    "status", existing.status(),
+                                                    "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                                            )).delayUntil(response -> workflowRuntime.record(request, blockedCheckpoint));
                                 }
 
                                 ScheduleSlotRequest targetSlotRequest = toSlotRequest(data);
                                 validateRescheduleScope(existing, targetSlotRequest, workflowRules);
                                 if (sameSlot(existing, targetSlotRequest)) {
+                                    RegistrationWorkflowCheckpoint blockedCheckpoint = resumedCheckpoint.advance(
+                                            "execute_write",
+                                            "reply",
+                                            "BLOCKED",
+                                            Map.of("reason", "sameSlot")
+                                    );
                                     return replyService.reply(request, RegistrationReplyScene.RESCHEDULE_SAME_SLOT, false,
                                             Map.of(
                                                     "action", "reschedule",
                                                     "registrationId", existing.registrationId(),
                                                     "clinicDate", clinicDate,
-                                                    "startTime", startTime
-                                            ));
+                                                    "startTime", startTime,
+                                                    "workflowTrace", workflowRuntime.traceData(blockedCheckpoint)
+                                            )).delayUntil(response -> workflowRuntime.record(request, blockedCheckpoint));
                                 }
 
                                 RegistrationRescheduleRequest rescheduleRequest = new RegistrationRescheduleRequest(
@@ -465,7 +552,21 @@ public class RegistrationWorkflowService {
                                 return registrationToolService.reserveSlot(request.traceId(), targetSlotRequest)
                                         .flatMap(ignored -> registrationToolService.rescheduleRegistration(request.traceId(), rescheduleRequest)
                                                 .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), toSlotRequest(existing))
-                                                        .flatMap(released -> toResultResponse(request, result, RegistrationReplyScene.RESCHEDULE_RESULT))
+                                                        .flatMap(released -> {
+                                                            RegistrationWorkflowCheckpoint completedCheckpoint = resumedCheckpoint.advance(
+                                                                    "execute_write",
+                                                                    "reply",
+                                                                    "SUCCEEDED",
+                                                                    registrationResultData(result)
+                                                            );
+                                                            return workflowRuntime.record(request, completedCheckpoint)
+                                                                    .then(toResultResponse(
+                                                                            request,
+                                                                            result,
+                                                                            Map.of("workflowTrace", workflowRuntime.traceData(completedCheckpoint)),
+                                                                            RegistrationReplyScene.RESCHEDULE_RESULT
+                                                                    ));
+                                                        })
                                                         .onErrorResume(ex -> withWarning(
                                                                 request,
                                                                 result,
@@ -497,7 +598,9 @@ public class RegistrationWorkflowService {
         return replyWithConfirmation(request, RegistrationIntent.CREATE, RegistrationReplyScene.CREATE_PREVIEW, data, checkpoint);
     }
 
-    private Mono<ChatResponse> buildCancelPreviewResponse(ChatRequest request, RegistrationResult existing) {
+    private Mono<ChatResponse> buildCancelPreviewResponse(ChatRequest request,
+                                                          RegistrationResult existing,
+                                                          RegistrationWorkflowCheckpoint checkpoint) {
         Map<String, Object> data = new HashMap<>();
         data.put("action", "cancel");
         data.put("previewed", true);
@@ -508,12 +611,13 @@ public class RegistrationWorkflowService {
         data.put("doctorId", existing.doctorId());
         data.put("clinicDate", existing.clinicDate());
         data.put("startTime", existing.startTime());
-        return replyWithConfirmation(request, RegistrationIntent.CANCEL, RegistrationReplyScene.CANCEL_PREVIEW, data);
+        return replyWithConfirmation(request, RegistrationIntent.CANCEL, RegistrationReplyScene.CANCEL_PREVIEW, data, checkpoint);
     }
 
     private Mono<ChatResponse> buildReschedulePreviewResponse(ChatRequest request,
                                                               RegistrationResult existing,
-                                                              SlotSummary targetSlot) {
+                                                              SlotSummary targetSlot,
+                                                              RegistrationWorkflowCheckpoint checkpoint) {
         Map<String, Object> data = new HashMap<>();
         data.put("action", "reschedule");
         data.put("previewed", true);
@@ -530,7 +634,7 @@ public class RegistrationWorkflowService {
         data.put("originalDoctorId", existing.doctorId());
         data.put("originalClinicDate", existing.clinicDate());
         data.put("originalStartTime", existing.startTime());
-        return replyWithConfirmation(request, RegistrationIntent.RESCHEDULE, RegistrationReplyScene.RESCHEDULE_PREVIEW, data);
+        return replyWithConfirmation(request, RegistrationIntent.RESCHEDULE, RegistrationReplyScene.RESCHEDULE_PREVIEW, data, checkpoint);
     }
 
     private Mono<ChatResponse> toQueryListResponse(ChatRequest request,
@@ -715,6 +819,47 @@ public class RegistrationWorkflowService {
                         "clinicDate", slot.clinicDate(),
                         "startTime", slot.startTime(),
                         "remainingSlots", slot.remainingSlots()
+                )
+        );
+    }
+
+    private RegistrationWorkflowCheckpoint cancelPreviewCheckpoint(RegistrationWorkflowCheckpoint checkpoint,
+                                                                   RegistrationResult existing) {
+        return orderCheckpoint(checkpoint, existing, "build_preview");
+    }
+
+    private RegistrationWorkflowCheckpoint reschedulePreviewCheckpoint(RegistrationWorkflowCheckpoint checkpoint,
+                                                                      RegistrationResult existing,
+                                                                      SlotSummary targetSlot) {
+        RegistrationWorkflowCheckpoint queried = orderCheckpoint(checkpoint, existing, "resolve_slot");
+        return queried.advance(
+                "resolve_slot",
+                "build_preview",
+                "SUCCEEDED",
+                nonNullMap(
+                        "departmentCode", targetSlot.departmentCode(),
+                        "doctorId", targetSlot.doctorId(),
+                        "clinicDate", targetSlot.clinicDate(),
+                        "startTime", targetSlot.startTime(),
+                        "remainingSlots", targetSlot.remainingSlots()
+                )
+        );
+    }
+
+    private RegistrationWorkflowCheckpoint orderCheckpoint(RegistrationWorkflowCheckpoint checkpoint,
+                                                          RegistrationResult existing,
+                                                          String nextNode) {
+        return checkpoint.advance(
+                "query_order",
+                nextNode,
+                "SUCCEEDED",
+                nonNullMap(
+                        "registrationId", existing.registrationId(),
+                        "status", existing.status(),
+                        "departmentCode", existing.departmentCode(),
+                        "doctorId", existing.doctorId(),
+                        "clinicDate", existing.clinicDate(),
+                        "startTime", existing.startTime()
                 )
         );
     }
