@@ -79,6 +79,9 @@ ai:
 app:
   confirmation:
     ttl: ${REGISTRATION_CONFIRMATION_TTL:PT10M}
+  registration:
+    workflow:
+      execution-log-enabled: ${REGISTRATION_WORKFLOW_EXECUTION_LOG_ENABLED:true}
   ai:
     registration-intent:
       llm-enabled: ${REGISTRATION_INTENT_LLM_ENABLED:true}

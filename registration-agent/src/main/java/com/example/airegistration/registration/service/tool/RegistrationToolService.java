@@ -18,6 +18,7 @@ import com.example.airegistration.registration.exception.RegistrationAgentExcept
 import com.example.airegistration.registration.service.RegistrationConfirmationContext;
 import com.example.airegistration.registration.service.RegistrationConfirmationService;
 import com.example.airegistration.registration.service.RegistrationFlowPolicy;
+import com.example.airegistration.registration.service.workflow.RegistrationWorkflowCheckpoint;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -106,6 +107,19 @@ public class RegistrationToolService {
                 intent,
                 data.keySet());
         return confirmationService.save(request, intent, data);
+    }
+
+    public Mono<String> saveConfirmation(ChatRequest request,
+                                         RegistrationIntent intent,
+                                         Map<String, Object> data,
+                                         RegistrationWorkflowCheckpoint checkpoint) {
+        log.info("[registration] save confirmation with checkpoint trace_id={} chat_id={} intent={} execution_id={} data_keys={}",
+                request.traceId(),
+                request.chatId(),
+                intent,
+                checkpoint == null ? null : checkpoint.executionId(),
+                data.keySet());
+        return confirmationService.save(request, intent, data, checkpoint);
     }
 
     public Mono<RegistrationConfirmationContext> consumeConfirmation(ChatRequest request, RegistrationIntent intent) {

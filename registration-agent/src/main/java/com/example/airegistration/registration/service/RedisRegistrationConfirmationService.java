@@ -5,6 +5,7 @@ import com.example.airegistration.dto.ChatRequest;
 import com.example.airegistration.enums.ApiErrorCode;
 import com.example.airegistration.registration.enums.RegistrationIntent;
 import com.example.airegistration.registration.exception.RegistrationAgentException;
+import com.example.airegistration.registration.service.workflow.RegistrationWorkflowCheckpoint;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
@@ -37,13 +38,25 @@ public class RedisRegistrationConfirmationService implements RegistrationConfirm
 
     @Override
     public Mono<String> save(ChatRequest request, RegistrationIntent intent, Map<String, Object> data) {
+        return save(request, intent, data, null);
+    }
+
+    @Override
+    public Mono<String> save(ChatRequest request,
+                             RegistrationIntent intent,
+                             Map<String, Object> data,
+                             RegistrationWorkflowCheckpoint checkpoint) {
         String confirmationId = nextConfirmationId();
+        RegistrationWorkflowCheckpoint storedCheckpoint = checkpoint == null
+                ? null
+                : checkpoint.withConfirmation(confirmationId, "build_preview", "execute_write", data);
         RegistrationConfirmationContext context = new RegistrationConfirmationContext(
                 confirmationId,
                 expectedAction(intent),
                 request.userId(),
                 request.chatId(),
-                data
+                data,
+                storedCheckpoint
         );
         return Mono.fromCallable(() -> objectMapper.writeValueAsString(context))
                 .flatMap(payload -> redisTemplate.opsForValue().set(contextKey(confirmationId), payload, ttl))

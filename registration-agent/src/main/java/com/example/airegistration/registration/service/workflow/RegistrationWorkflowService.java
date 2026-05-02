@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,15 +47,26 @@ public class RegistrationWorkflowService {
     private final RegistrationReplyService replyService;
     private final RegistrationRuleService registrationRuleService;
     private final RegistrationToolService registrationToolService;
+    private final RegistrationWorkflowRuntime workflowRuntime;
+
+    @Autowired
+    public RegistrationWorkflowService(RegistrationFlowPolicy flowPolicy,
+                                       RegistrationReplyService replyService,
+                                       RegistrationRuleService registrationRuleService,
+                                       RegistrationToolService registrationToolService,
+                                       RegistrationWorkflowRuntime workflowRuntime) {
+        this.flowPolicy = flowPolicy;
+        this.replyService = replyService;
+        this.registrationRuleService = registrationRuleService;
+        this.registrationToolService = registrationToolService;
+        this.workflowRuntime = workflowRuntime == null ? RegistrationWorkflowRuntime.noop() : workflowRuntime;
+    }
 
     public RegistrationWorkflowService(RegistrationFlowPolicy flowPolicy,
                                        RegistrationReplyService replyService,
                                        RegistrationRuleService registrationRuleService,
                                        RegistrationToolService registrationToolService) {
-        this.flowPolicy = flowPolicy;
-        this.replyService = replyService;
-        this.registrationRuleService = registrationRuleService;
-        this.registrationToolService = registrationToolService;
+        this(flowPolicy, replyService, registrationRuleService, registrationToolService, RegistrationWorkflowRuntime.noop());
     }
 
     public Mono<ChatResponse> handle(ChatRequest request, RegistrationIntent intent) {
@@ -78,6 +90,7 @@ public class RegistrationWorkflowService {
                 request.metadata().keySet());
         RegistrationWorkflowRules workflowRules =
                 registrationRuleService.resolveWorkflowRules(request, RegistrationIntent.CREATE, Map.of("action", "create"));
+        RegistrationWorkflowCheckpoint checkpoint = workflowRuntime.start(request, RegistrationIntent.CREATE);
         if (isConfirming(request)) {
             log.info("[registration] create confirmation requested trace_id={} chat_id={} confirmation_id={}",
                     request.traceId(),
@@ -106,15 +119,29 @@ public class RegistrationWorkflowService {
                 replyData.put("acceptsSymptomDescription", true);
                 replyData.put("nextStep", "describeSymptoms");
             }
-            return replyService.reply(request, RegistrationReplyScene.CREATE_MISSING_DEPARTMENT, false,
-                    Map.copyOf(replyData));
+            RegistrationWorkflowCheckpoint blockedCheckpoint = checkpoint.advance(
+                    "extract_slots",
+                    "reply",
+                    "BLOCKED",
+                    Map.of("missingFields", String.join(",", missingFields))
+            );
+            replyData.put("workflowTrace", workflowRuntime.traceData(blockedCheckpoint));
+            return workflowRuntime.record(request, blockedCheckpoint)
+                    .then(replyService.reply(request, RegistrationReplyScene.CREATE_MISSING_DEPARTMENT, false,
+                            Map.copyOf(replyData)));
         }
 
         Mono<PatientSummary> patientMono = registrationToolService.fetchDefaultPatient(request.traceId(), request.userId());
         Mono<SlotSummary> slotMono = registrationToolService.previewCreateSlot(request, departmentCode, scheduleSearchKeyword);
 
         return Mono.zip(patientMono, slotMono)
-                .flatMap(tuple -> buildCreatePreviewResponse(request, tuple.getT1(), tuple.getT2()))
+                .flatMap(tuple -> buildCreatePreviewResponse(request, tuple.getT1(), tuple.getT2(), previewCheckpoint(
+                        checkpoint,
+                        tuple.getT1(),
+                        tuple.getT2(),
+                        departmentCode,
+                        scheduleSearchKeyword
+                )))
                 .onErrorResume(ex -> toErrorResponse(request, ex, "create"));
     }
 
@@ -125,7 +152,9 @@ public class RegistrationWorkflowService {
                             request.traceId(),
                             request.chatId(),
                             context.confirmationId());
-                    Map<String, Object> data = context.data();
+                    RegistrationWorkflowCheckpoint resumedCheckpoint =
+                            workflowRuntime.resume(request, context.checkpoint(), "execute_write");
+                    Map<String, Object> data = resumeData(context);
                     ScheduleSlotRequest slotRequest = toSlotRequest(data);
                     RegistrationCommand command = new RegistrationCommand(
                             request.userId(),
@@ -139,10 +168,34 @@ public class RegistrationWorkflowService {
                             request.chatId()
                     );
 
-                    return registrationToolService.reserveSlot(request.traceId(), slotRequest)
+                    return workflowRuntime.record(request, resumedCheckpoint)
+                            .then(registrationToolService.reserveSlot(request.traceId(), slotRequest))
                             .flatMap(ignored -> registrationToolService.createRegistration(request.traceId(), command)
-                                    .flatMap(result -> toResultResponse(request, result, RegistrationReplyScene.CREATE_RESULT))
-                                    .onErrorResume(ex -> registrationToolService.rollbackReservedSlot(request.traceId(), slotRequest, ex)))
+                                    .flatMap(result -> {
+                                        RegistrationWorkflowCheckpoint completedCheckpoint = resumedCheckpoint.advance(
+                                                "execute_write",
+                                                "reply",
+                                                "SUCCEEDED",
+                                                registrationResultData(result)
+                                        );
+                                        return workflowRuntime.record(request, completedCheckpoint)
+                                                .then(toResultResponse(
+                                                        request,
+                                                        result,
+                                                        Map.of("workflowTrace", workflowRuntime.traceData(completedCheckpoint)),
+                                                        RegistrationReplyScene.CREATE_RESULT
+                                                ));
+                                    })
+                                    .onErrorResume(ex -> {
+                                        RegistrationWorkflowCheckpoint failedCheckpoint = resumedCheckpoint.advance(
+                                                "execute_write",
+                                                "compensate",
+                                                "FAILED",
+                                                errorData(ex)
+                                        );
+                                        return workflowRuntime.record(request, failedCheckpoint)
+                                                .then(registrationToolService.rollbackReservedSlot(request.traceId(), slotRequest, ex));
+                                    }))
                             .onErrorResume(ex -> toErrorResponse(request, ex, "create"));
                 });
     }
@@ -424,7 +477,10 @@ public class RegistrationWorkflowService {
                 });
     }
 
-    private Mono<ChatResponse> buildCreatePreviewResponse(ChatRequest request, PatientSummary patient, SlotSummary slot) {
+    private Mono<ChatResponse> buildCreatePreviewResponse(ChatRequest request,
+                                                          PatientSummary patient,
+                                                          SlotSummary slot,
+                                                          RegistrationWorkflowCheckpoint checkpoint) {
         Map<String, Object> data = new HashMap<>();
         data.put("action", "create");
         data.put("previewed", true);
@@ -438,7 +494,7 @@ public class RegistrationWorkflowService {
         data.put("clinicDate", slot.clinicDate());
         data.put("startTime", slot.startTime());
         data.put("remainingSlots", slot.remainingSlots());
-        return replyWithConfirmation(request, RegistrationIntent.CREATE, RegistrationReplyScene.CREATE_PREVIEW, data);
+        return replyWithConfirmation(request, RegistrationIntent.CREATE, RegistrationReplyScene.CREATE_PREVIEW, data, checkpoint);
     }
 
     private Mono<ChatResponse> buildCancelPreviewResponse(ChatRequest request, RegistrationResult existing) {
@@ -586,16 +642,31 @@ public class RegistrationWorkflowService {
                                                      RegistrationIntent intent,
                                                      RegistrationReplyScene scene,
                                                      Map<String, Object> data) {
+        return replyWithConfirmation(request, intent, scene, data, null);
+    }
+
+    private Mono<ChatResponse> replyWithConfirmation(ChatRequest request,
+                                                     RegistrationIntent intent,
+                                                     RegistrationReplyScene scene,
+                                                     Map<String, Object> data,
+                                                     RegistrationWorkflowCheckpoint checkpoint) {
         Map<String, Object> previewData = new HashMap<>(data);
-        return registrationToolService.saveConfirmation(request, intent, Map.copyOf(previewData))
+        return registrationToolService.saveConfirmation(request, intent, Map.copyOf(previewData), checkpoint)
                 .flatMap(confirmationId -> {
                     log.info("[registration] confirmation saved trace_id={} chat_id={} intent={} confirmation_id={}",
                             request.traceId(),
                             request.chatId(),
                             intent,
                             confirmationId);
+                    RegistrationWorkflowCheckpoint waitingCheckpoint = checkpoint == null
+                            ? null
+                            : checkpoint.withConfirmation(confirmationId, "build_preview", "execute_write", Map.copyOf(previewData));
                     previewData.put("confirmationId", confirmationId);
-                    return replyService.reply(request, scene, true, Map.copyOf(previewData));
+                    if (waitingCheckpoint != null) {
+                        previewData.put("workflowTrace", workflowRuntime.traceData(waitingCheckpoint));
+                    }
+                    return workflowRuntime.record(request, waitingCheckpoint)
+                            .then(replyService.reply(request, scene, true, Map.copyOf(previewData)));
                 });
     }
 
@@ -609,6 +680,74 @@ public class RegistrationWorkflowService {
         putIfNonNull(data, "clinicDate", result.clinicDate());
         putIfNonNull(data, "startTime", result.startTime());
         return data;
+    }
+
+    private RegistrationWorkflowCheckpoint previewCheckpoint(RegistrationWorkflowCheckpoint checkpoint,
+                                                            PatientSummary patient,
+                                                            SlotSummary slot,
+                                                            String departmentCode,
+                                                            String scheduleSearchKeyword) {
+        RegistrationWorkflowCheckpoint extracted = checkpoint.advance(
+                "extract_slots",
+                "load_patient",
+                "SUCCEEDED",
+                nonNullMap(
+                        "departmentCode", departmentCode,
+                        "scheduleSearchKeyword", scheduleSearchKeyword
+                )
+        );
+        RegistrationWorkflowCheckpoint patientLoaded = extracted.advance(
+                "load_patient",
+                "resolve_slot",
+                "SUCCEEDED",
+                nonNullMap(
+                        "patientId", patient.patientId(),
+                        "patientName", patient.name()
+                )
+        );
+        return patientLoaded.advance(
+                "resolve_slot",
+                "build_preview",
+                "SUCCEEDED",
+                nonNullMap(
+                        "departmentCode", slot.departmentCode(),
+                        "doctorId", slot.doctorId(),
+                        "clinicDate", slot.clinicDate(),
+                        "startTime", slot.startTime(),
+                        "remainingSlots", slot.remainingSlots()
+                )
+        );
+    }
+
+    private Map<String, Object> resumeData(RegistrationConfirmationContext context) {
+        RegistrationWorkflowCheckpoint checkpoint = context.checkpoint();
+        if (checkpoint != null && !checkpoint.toolResultSnapshot().isEmpty()) {
+            return checkpoint.toolResultSnapshot();
+        }
+        return context.data();
+    }
+
+    private Map<String, Object> errorData(Throwable throwable) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("errorType", throwable.getClass().getSimpleName());
+        data.put("errorMessage", extractErrorMessage(throwable));
+        Integer errorCode = extractErrorCode(throwable);
+        if (errorCode != null) {
+            data.put("errorCode", errorCode);
+        }
+        return Map.copyOf(data);
+    }
+
+    private Map<String, Object> nonNullMap(Object... pairs) {
+        Map<String, Object> data = new HashMap<>();
+        for (int index = 0; index + 1 < pairs.length; index += 2) {
+            Object key = pairs[index];
+            Object value = pairs[index + 1];
+            if (key != null && value != null) {
+                data.put(String.valueOf(key), value);
+            }
+        }
+        return Map.copyOf(data);
     }
 
     private ScheduleSlotRequest toSlotRequest(Map<String, Object> data) {

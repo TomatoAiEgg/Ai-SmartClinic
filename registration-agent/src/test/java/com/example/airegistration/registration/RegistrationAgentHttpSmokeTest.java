@@ -20,6 +20,7 @@ import com.example.airegistration.enums.AgentRoute;
 import com.example.airegistration.registration.enums.RegistrationIntent;
 import com.example.airegistration.registration.service.rag.RegistrationPolicyRagService;
 import com.example.airegistration.registration.service.tool.RegistrationToolService;
+import com.example.airegistration.registration.service.workflow.RegistrationWorkflowCheckpoint;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,10 @@ import reactor.core.publisher.Mono;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "app.ai.registration-intent.llm-enabled=false"
+        properties = {
+                "app.ai.registration-intent.llm-enabled=false",
+                "app.registration.workflow.execution-log-enabled=false"
+        }
 )
 @AutoConfigureWebTestClient
 class RegistrationAgentHttpSmokeTest {
@@ -69,7 +73,11 @@ class RegistrationAgentHttpSmokeTest {
                 "09:00",
                 3
         )));
-        when(registrationToolService.saveConfirmation(any(ChatRequest.class), eq(RegistrationIntent.CREATE), anyMap()))
+        when(registrationToolService.saveConfirmation(
+                any(ChatRequest.class),
+                eq(RegistrationIntent.CREATE),
+                anyMap(),
+                any(RegistrationWorkflowCheckpoint.class)))
                 .thenReturn(Mono.just("confirm-1"));
         when(aiChatClient.callText(any())).thenReturn("registration smoke ok");
 
@@ -98,7 +106,11 @@ class RegistrationAgentHttpSmokeTest {
                 .containsEntry("departmentCode", "RESP")
                 .containsEntry("doctorId", "doctor-1");
         verify(registrationToolService).fetchDefaultPatient(anyString(), eq("user-1"));
-        verify(registrationToolService).saveConfirmation(any(ChatRequest.class), eq(RegistrationIntent.CREATE), anyMap());
+        verify(registrationToolService).saveConfirmation(
+                any(ChatRequest.class),
+                eq(RegistrationIntent.CREATE),
+                anyMap(),
+                any(RegistrationWorkflowCheckpoint.class));
         verify(aiChatClient).callText(any());
     }
 
@@ -123,7 +135,11 @@ class RegistrationAgentHttpSmokeTest {
                 "09:00",
                 3
         )));
-        when(registrationToolService.saveConfirmation(any(ChatRequest.class), eq(RegistrationIntent.CREATE), anyMap()))
+        when(registrationToolService.saveConfirmation(
+                any(ChatRequest.class),
+                eq(RegistrationIntent.CREATE),
+                anyMap(),
+                any(RegistrationWorkflowCheckpoint.class)))
                 .thenReturn(Mono.just("confirm-1"));
         when(aiChatClient.callText(any())).thenReturn("registration execute ok");
 
@@ -154,7 +170,11 @@ class RegistrationAgentHttpSmokeTest {
                 .containsEntry("confirmationId", "confirm-1")
                 .containsEntry("departmentCode", "RESP");
         assertThat(response.executionMeta().agentName()).isEqualTo("registration-agent");
-        verify(registrationToolService).saveConfirmation(any(ChatRequest.class), eq(RegistrationIntent.CREATE), anyMap());
+        verify(registrationToolService).saveConfirmation(
+                any(ChatRequest.class),
+                eq(RegistrationIntent.CREATE),
+                anyMap(),
+                any(RegistrationWorkflowCheckpoint.class));
         verify(aiChatClient).callText(any());
     }
 

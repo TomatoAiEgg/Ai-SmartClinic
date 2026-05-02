@@ -20,6 +20,7 @@ import com.example.airegistration.registration.service.rag.RegistrationPolicyRag
 import com.example.airegistration.registration.service.rag.RegistrationRuleService;
 import com.example.airegistration.registration.service.orchestrator.RegistrationOrchestratorService;
 import com.example.airegistration.registration.service.tool.RegistrationToolService;
+import com.example.airegistration.registration.service.workflow.RegistrationWorkflowCheckpoint;
 import com.example.airegistration.registration.service.workflow.RegistrationWorkflowService;
 
 import java.io.IOException;
@@ -341,6 +342,98 @@ class RegistrationAgentServiceTest {
         assertThat(searchRequest.getPath()).isEqualTo("/api/mcp/schedules/search");
         assertThat(searchRequest.getBody().readUtf8())
                 .contains("\"keyword\":\"Dr. Murphy\"");
+    }
+
+    @Test
+    void shouldResumeCreateWorkflowFromStoredCheckpointAfterPreview() throws Exception {
+        patientServer.enqueue(jsonResponse("""
+                {
+                  "patientId":"patient-test-001",
+                  "userId":"user-test-001",
+                  "name":"Alex Chen",
+                  "idType":"ID_CARD",
+                  "maskedIdNumber":"110***********1234",
+                  "maskedPhone":"138****0001"
+                }
+                """));
+        scheduleServer.enqueue(jsonResponse("""
+                {
+                  "departmentCode":"RESP",
+                  "departmentName":"Respiratory Medicine",
+                  "doctorId":"doc-106",
+                  "doctorName":"Dr. Murphy",
+                  "clinicDate":"2026-04-09",
+                  "startTime":"14:30",
+                  "remainingSlots":4
+                }
+                """));
+        scheduleServer.enqueue(jsonResponse("""
+                {
+                  "departmentCode":"RESP",
+                  "departmentName":"Respiratory Medicine",
+                  "doctorId":"doc-106",
+                  "doctorName":"Dr. Murphy",
+                  "clinicDate":"2026-04-09",
+                  "startTime":"14:30",
+                  "remainingSlots":3
+                }
+                """));
+        registrationServer.enqueue(jsonResponse("""
+                {
+                  "registrationId":"REG-WF123456",
+                  "status":"BOOKED",
+                  "message":"Registration created successfully.",
+                  "patientId":"patient-test-001",
+                  "departmentCode":"RESP",
+                  "doctorId":"doc-106",
+                  "clinicDate":"2026-04-09",
+                  "startTime":"14:30"
+                }
+                """));
+
+        ChatResponse preview = service.handle(new ChatRequest(
+                "chat-wf",
+                "user-test-001",
+                "book respiratory appointment doc-106 2026-04-09 14:30",
+                Map.of()
+        )).block();
+
+        assertThat(preview).isNotNull();
+        String confirmationId = (String) preview.data().get("confirmationId");
+        assertThat(confirmationId).isNotBlank();
+        assertThat(preview.data()).containsKey("workflowTrace");
+
+        ChatResponse confirmed = service.handle(new ChatRequest(
+                "chat-wf",
+                "user-test-001",
+                "confirm create",
+                Map.of(
+                        "action", "create",
+                        "confirmed", "true",
+                        "confirmationAction", "create",
+                        "confirmationId", confirmationId
+                )
+        )).block();
+
+        assertThat(confirmed).isNotNull();
+        assertThat(confirmed.data())
+                .containsEntry("registrationId", "REG-WF123456")
+                .containsKey("workflowTrace");
+
+        RecordedRequest patientRequest = patientServer.takeRequest(1, TimeUnit.SECONDS);
+        RecordedRequest resolveRequest = scheduleServer.takeRequest(1, TimeUnit.SECONDS);
+        RecordedRequest reserveRequest = scheduleServer.takeRequest(1, TimeUnit.SECONDS);
+        RecordedRequest createRequest = registrationServer.takeRequest(1, TimeUnit.SECONDS);
+        RecordedRequest extraPatientRequest = patientServer.takeRequest(300, TimeUnit.MILLISECONDS);
+
+        assertThat(patientRequest.getPath()).startsWith("/api/mcp/patients/default");
+        assertThat(resolveRequest.getPath()).isEqualTo("/api/mcp/schedules/resolve");
+        assertThat(reserveRequest.getPath()).isEqualTo("/api/mcp/schedules/reserve");
+        assertThat(createRequest.getPath()).isEqualTo("/api/mcp/registrations");
+        assertThat(createRequest.getBody().readUtf8())
+                .contains("\"externalRequestId\":\"" + confirmationId + "\"")
+                .contains("\"chatId\":\"chat-wf\"");
+        assertThat(extraPatientRequest).isNull();
     }
 
     @Test
@@ -720,6 +813,26 @@ class RegistrationAgentServiceTest {
                     request.userId(),
                     request.chatId(),
                     data
+            ));
+            return Mono.just(confirmationId);
+        }
+
+        @Override
+        public Mono<String> save(ChatRequest request,
+                                 RegistrationIntent intent,
+                                 Map<String, Object> data,
+                                 RegistrationWorkflowCheckpoint checkpoint) {
+            String confirmationId = "CONF-" + sequence.incrementAndGet();
+            RegistrationWorkflowCheckpoint storedCheckpoint = checkpoint == null
+                    ? null
+                    : checkpoint.withConfirmation(confirmationId, "build_preview", "execute_write", data);
+            contexts.put(confirmationId, new RegistrationConfirmationContext(
+                    confirmationId,
+                    expectedAction(intent),
+                    request.userId(),
+                    request.chatId(),
+                    data,
+                    storedCheckpoint
             ));
             return Mono.just(confirmationId);
         }
