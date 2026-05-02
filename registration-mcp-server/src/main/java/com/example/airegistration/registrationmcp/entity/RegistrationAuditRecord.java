@@ -7,6 +7,7 @@ public record RegistrationAuditRecord(
         String operationType,
         String operatorUserId,
         String chatId,
+        String traceId,
         boolean success,
         String reason,
         Map<String, Object> requestPayload,
@@ -19,5 +20,19 @@ public record RegistrationAuditRecord(
         responsePayload = responsePayload == null ? Map.of() : Map.copyOf(responsePayload);
         beforeSnapshot = beforeSnapshot == null ? Map.of() : Map.copyOf(beforeSnapshot);
         afterSnapshot = afterSnapshot == null ? Map.of() : Map.copyOf(afterSnapshot);
+    }
+
+    public RegistrationAuditRecord(String registrationId,
+                                   String operationType,
+                                   String operatorUserId,
+                                   String chatId,
+                                   boolean success,
+                                   String reason,
+                                   Map<String, Object> requestPayload,
+                                   Map<String, Object> responsePayload,
+                                   Map<String, Object> beforeSnapshot,
+                                   Map<String, Object> afterSnapshot) {
+        this(registrationId, operationType, operatorUserId, chatId, null, success, reason,
+                requestPayload, responsePayload, beforeSnapshot, afterSnapshot);
     }
 }

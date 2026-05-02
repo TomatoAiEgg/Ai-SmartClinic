@@ -36,6 +36,7 @@ public class MybatisRegistrationAuditRepository implements RegistrationAuditRepo
         entity.setOperationType(record.operationType());
         entity.setOperatorUserId(record.operatorUserId());
         entity.setChatId(record.chatId());
+        entity.setTraceId(record.traceId());
         entity.setSourceService(SOURCE_SERVICE);
         entity.setSuccess(record.success());
         entity.setReason(record.reason());
