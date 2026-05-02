@@ -1,0 +1,302 @@
+{
+  "version": "2026-05-02",
+  "description": "Baseline RAG regression evaluation cases for the enterprise knowledge service.",
+  "defaults": {
+    "expectedStatus": "HIT",
+    "topK": 4,
+    "minScore": 0.0,
+    "maxExpectedRank": 4,
+    "minBestScore": 0.55
+  },
+  "suites": [
+    {
+      "group": "triage",
+      "namespace": "default-triage-knowledge",
+      "topK": 4,
+      "maxExpectedRank": 4,
+      "minBestScore": 0.58,
+      "expectations": [
+        {
+          "name": "respiratory",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "RESP"
+          },
+          "queries": [
+            "patient has fever cough sore throat and chest congestion",
+            "adult with cough phlegm wheezing and no emergency red flags",
+            "persistent cough after cold with mild fever which clinic",
+            "respiratory symptoms fever throat pain sputum and mild shortness of breath",
+            "cough and asthma like breathing but alert and stable",
+            "fever with cough and runny nose needs outpatient department",
+            "sore throat cough sputum no chest pain which department"
+          ]
+        },
+        {
+          "name": "emergency",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "ER"
+          },
+          "queries": [
+            "severe chest pain with trouble breathing now",
+            "unconscious patient with convulsions and bleeding",
+            "sudden limb weakness and slurred speech",
+            "massive bleeding after injury should not book outpatient",
+            "severe breathing difficulty and low oxygen",
+            "acute chest tightness with fainting"
+          ]
+        },
+        {
+          "name": "digestive",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "GI"
+          },
+          "queries": [
+            "stomach pain diarrhea vomiting reflux",
+            "abdominal pain loose stool nausea no blood",
+            "acid reflux bloating poor appetite",
+            "diarrhea and vomiting after meal with mild dehydration",
+            "stomachache and digestive discomfort without black stool",
+            "belly pain vomiting no severe persistent pain"
+          ]
+        },
+        {
+          "name": "skin",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "DERM"
+          },
+          "queries": [
+            "skin rash itching allergy eczema",
+            "hives and itchy red skin without breathing problems",
+            "acne and skin inflammation which department",
+            "localized skin redness swelling and pain",
+            "allergic rash but no throat swelling"
+          ]
+        },
+        {
+          "name": "pediatric",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "PED"
+          },
+          "queries": [
+            "child has fever and cough which clinic",
+            "baby diarrhea and rash outpatient department",
+            "toddler common cold symptoms",
+            "parent asks about infant fever without convulsion",
+            "children common illness appointment"
+          ]
+        },
+        {
+          "name": "gynecology",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "GYN"
+          },
+          "queries": [
+            "menstrual abnormality and cramps",
+            "vaginal discharge and gynecological inflammation",
+            "pregnancy early stage ordinary consultation",
+            "pre pregnancy consultation which department",
+            "period pain and irregular menstruation"
+          ]
+        },
+        {
+          "name": "ophthalmology",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "OPH"
+          },
+          "queries": [
+            "eye pain red eye and tearing",
+            "blurred vision and foreign body feeling",
+            "vision decline without chemical injury",
+            "red swollen painful eye outpatient",
+            "eye discomfort with light sensitivity"
+          ]
+        },
+        {
+          "name": "neurology",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "NEURO"
+          },
+          "queries": [
+            "headache dizziness and numbness without stroke signs",
+            "migraine outpatient department",
+            "vertigo and sleep related neurological discomfort",
+            "limb numbness but no sudden weakness",
+            "chronic headache and dizziness consultation",
+            "neurological symptoms insomnia and tingling"
+          ]
+        },
+        {
+          "name": "general",
+          "expectedAnyHitAttributes": {
+            "departmentCode": "GEN"
+          },
+          "queries": [
+            "unclear mild symptoms cannot decide department",
+            "chronic disease follow up and physical exam indicators",
+            "multiple light symptoms need first evaluation",
+            "general consultation for mixed minor problems",
+            "not sure which clinic to choose for routine issue"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "guide",
+      "namespace": "default-guide-knowledge",
+      "topK": 3,
+      "maxExpectedRank": 3,
+      "minBestScore": 0.55,
+      "expectations": [
+        {
+          "name": "insurance-materials",
+          "expectedAnyHitAttributes": {
+            "topic": "insurance-materials"
+          },
+          "queries": [
+            "what documents should I bring for outpatient visit",
+            "do I need ID card and insurance card",
+            "materials needed for clinic appointment",
+            "child visit requires guardian identity proof",
+            "medical insurance electronic certificate materials",
+            "outpatient registration document checklist"
+          ]
+        },
+        {
+          "name": "arrival-flow",
+          "expectedAnyHitAttributes": {
+            "topic": "arrival-flow"
+          },
+          "queries": [
+            "what should I do after successful appointment",
+            "arrive at hospital check in and get number",
+            "where to wait after taking the queue number",
+            "appointment arrival process before seeing doctor",
+            "what happens if I am late for my visit",
+            "follow onsite calling after appointment"
+          ]
+        },
+        {
+          "name": "cancel-reschedule",
+          "expectedAnyHitAttributes": {
+            "topic": "cancel-reschedule"
+          },
+          "queries": [
+            "how to cancel an appointment before visit",
+            "can I reschedule my outpatient appointment",
+            "cancel or change booking through online entrance",
+            "appointment already checked in can I refund",
+            "missed queue number cancellation rule",
+            "need to change visit time before hospital arrival"
+          ]
+        },
+        {
+          "name": "lab-report",
+          "expectedAnyHitAttributes": {
+            "topic": "lab-report"
+          },
+          "queries": [
+            "how to query lab test report online",
+            "doctor ordered examination where should I go",
+            "when will inspection report be available",
+            "abnormal test result should return to doctor",
+            "report result interpretation after examination",
+            "medical imaging and laboratory report lookup"
+          ]
+        },
+        {
+          "name": "safety",
+          "expectedAnyHitAttributes": {
+            "topic": "safety"
+          },
+          "queries": [
+            "chat mentions chest pain should I go emergency",
+            "severe breathing trouble during guide conversation",
+            "unconscious or convulsions safety reminder",
+            "massive bleeding should not use ordinary guide",
+            "sudden paralysis needs emergency advice",
+            "high risk symptom route for hospital guide"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "registration-policy",
+      "namespace": "default-registration-policy",
+      "topK": 4,
+      "maxExpectedRank": 4,
+      "minBestScore": 0.55,
+      "expectations": [
+        {
+          "name": "create",
+          "expectedAnyHitAttributes": {
+            "actionTag": "CREATE"
+          },
+          "queries": [
+            "what information must be confirmed before creating appointment",
+            "need patient department doctor date and time before booking",
+            "registration preview before formal order creation",
+            "do not create appointment without user confirmation",
+            "confirm all required slots before registration",
+            "create outpatient booking confirmation rule"
+          ]
+        },
+        {
+          "name": "query",
+          "expectedAnyHitAttributes": {
+            "actionTag": "QUERY"
+          },
+          "queries": [
+            "query appointment availability from real schedule data",
+            "do not fabricate doctors remaining slots or fees",
+            "schedule MCP should be source for slot query",
+            "search doctor availability and outpatient time",
+            "remaining appointment slots must come from system",
+            "appointment query data boundary"
+          ]
+        },
+        {
+          "name": "cancel",
+          "expectedAnyHitAttributes": {
+            "actionTag": "CANCEL"
+          },
+          "queries": [
+            "cancel appointment needs order ownership and confirmation",
+            "cannot cancel already completed registration again",
+            "repeat cancel request for cancelled order",
+            "explain cancellation impact before final confirmation",
+            "verify order status before appointment cancellation",
+            "registration refund and cancel rule"
+          ]
+        },
+        {
+          "name": "reschedule",
+          "expectedAnyHitAttributes": {
+            "actionTag": "RESCHEDULE"
+          },
+          "queries": [
+            "reschedule should confirm original order and new slot",
+            "change appointment time while keeping context",
+            "new slot unavailable during reschedule",
+            "release old slot or lock new slot failure",
+            "appointment reschedule workflow rule",
+            "rebooking requires checking whether original order can change"
+          ]
+        },
+        {
+          "name": "boundary",
+          "expectedAnyHitAttributes": {
+            "actionTag": "ALL"
+          },
+          "queries": [
+            "AI must not invent doctor order status or payment result",
+            "RAG policy cannot replace structured business data",
+            "registration agent must rely on MCP and database result",
+            "business boundary for all registration actions",
+            "patient identity and real slot data cannot be guessed",
+            "general appointment policy for create query cancel and reschedule"
+          ]
+        }
+      ]
+    }
+  ]
+}
