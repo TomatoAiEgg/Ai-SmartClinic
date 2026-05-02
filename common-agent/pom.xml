@@ -10,6 +10,11 @@
     <name>common-agent</name>
     <dependencies>
         <dependency>
+            <groupId>com.example</groupId>
+            <artifactId>common-domain</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>

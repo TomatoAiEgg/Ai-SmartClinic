@@ -5,6 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.airegistration.agent.AgentCapability;
+import com.example.airegistration.agent.AgentRequestEnvelope;
+import com.example.airegistration.agent.AgentResponseEnvelope;
 import com.example.airegistration.ai.service.AiChatClient;
 import com.example.airegistration.dto.ChatRequest;
 import com.example.airegistration.dto.ChatResponse;
@@ -66,5 +69,57 @@ class GuideAgentHttpSmokeTest {
         List<String> citations = (List<String>) response.data().get("citations");
         assertThat(citations).isNotEmpty();
         verify(aiChatClient).callText(any());
+    }
+
+    @Test
+    void shouldExposeUnifiedAgentExecuteEndpointWithRagContext() {
+        when(aiChatClient.callText(any())).thenReturn("guide execute ok");
+        when(guideRagService.buildContext(any())).thenReturn(Map.of(
+                "source", "guide-agent-rag",
+                "retriever", "pgvector",
+                "matchCount", 1,
+                "citations", List.of("guide-test-001"),
+                "referenceText", "test guide evidence"
+        ));
+
+        AgentResponseEnvelope response = webTestClient.post()
+                .uri("/api/agent/execute")
+                .bodyValue(new AgentRequestEnvelope(
+                        "trace-1",
+                        "chat-1",
+                        "user-1",
+                        "what insurance materials should I bring?",
+                        Map.of(),
+                        Map.of()
+                ))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(AgentResponseEnvelope.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(response).isNotNull();
+        assertThat(response.route()).isEqualTo(AgentRoute.GUIDE.name());
+        assertThat(response.message()).isEqualTo("guide execute ok");
+        assertThat(response.structuredData()).containsEntry("source", "guide-agent-rag");
+        assertThat(response.executionMeta().agentName()).isEqualTo("guide-agent");
+        assertThat(response.executionMeta().evidenceIds()).contains("guide-test-001");
+        assertThat(response.executionMeta().attributes()).containsKey("ragSummary");
+        verify(aiChatClient).callText(any());
+    }
+
+    @Test
+    void shouldExposeAgentCapabilities() {
+        AgentCapability capability = webTestClient.get()
+                .uri("/api/agent/capabilities")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(AgentCapability.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertThat(capability).isNotNull();
+        assertThat(capability.agentName()).isEqualTo("guide-agent");
+        assertThat(capability.supportedRoutes()).contains(AgentRoute.GUIDE.name());
     }
 }

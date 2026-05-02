@@ -62,19 +62,20 @@ class SupervisorOrchestratorServiceTest {
     }
 
     @Test
-    void shouldRouteRegistrationActionToRegistrationAgentHttpEndpoint() throws Exception {
+    void shouldRouteRegistrationActionToRegistrationAgentExecuteEndpoint() throws Exception {
         registrationAgentServer.enqueue(jsonResponse("""
                 {
-                  "chatId":"chat-1",
                   "route":"REGISTRATION",
                   "message":"registration preview",
                   "requiresConfirmation":true,
-                  "data":{
+                  "structuredData":{
                     "action":"create",
                     "departmentCode":"RESP",
                     "previewed":true,
                     "confirmationAction":"create"
-                  }
+                  },
+                  "confirmationId":"",
+                  "nextAction":"create"
                 }
                 """));
 
@@ -95,7 +96,7 @@ class SupervisorOrchestratorServiceTest {
         RecordedRequest request = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
         assertThat(request).isNotNull();
         assertThat(request.getMethod()).isEqualTo("POST");
-        assertThat(request.getPath()).isEqualTo("/api/registration");
+        assertThat(request.getPath()).isEqualTo("/api/agent/execute");
         assertThat(request.getBody().readUtf8())
                 .contains("\"chatId\":\"chat-1\"")
                 .contains("\"userId\":\"user-test-001\"")
@@ -109,30 +110,30 @@ class SupervisorOrchestratorServiceTest {
                 .thenReturn(Mono.just(RouteDecision.rule(AgentRoute.TRIAGE, "test")));
         registrationAgentServer.enqueue(jsonResponse("""
                 {
-                  "chatId":"chat-2",
                   "route":"TRIAGE",
-                  "message":"建议优先挂呼吸内科。",
+                  "message":"triage suggestion",
                   "requiresConfirmation":false,
-                  "data":{
+                  "structuredData":{
                     "departmentCode":"RESP",
-                    "departmentName":"呼吸内科",
+                    "departmentName":"Respiratory",
                     "emergency":false,
-                    "reason":"发热和咳嗽更符合呼吸内科就诊范围"
+                    "reason":"fever and cough fit respiratory clinic"
                   }
                 }
                 """));
         registrationAgentServer.enqueue(jsonResponse("""
                 {
-                  "chatId":"chat-2",
                   "route":"REGISTRATION",
-                  "message":"已为你找到呼吸内科可预约号源，请确认。",
+                  "message":"registration preview",
                   "requiresConfirmation":true,
-                  "data":{
+                  "structuredData":{
                     "action":"create",
                     "departmentCode":"RESP",
                     "previewed":true,
                     "confirmationAction":"create"
-                  }
+                  },
+                  "confirmationId":"",
+                  "nextAction":"create"
                 }
                 """));
 
@@ -155,19 +156,56 @@ class SupervisorOrchestratorServiceTest {
         RecordedRequest triageRequest = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
         assertThat(triageRequest).isNotNull();
         assertThat(triageRequest.getMethod()).isEqualTo("POST");
-        assertThat(triageRequest.getPath()).isEqualTo("/api/triage");
+        assertThat(triageRequest.getPath()).isEqualTo("/api/agent/execute");
 
         RecordedRequest registrationRequest = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
         assertThat(registrationRequest).isNotNull();
         assertThat(registrationRequest.getMethod()).isEqualTo("POST");
-        assertThat(registrationRequest.getPath()).isEqualTo("/api/registration");
+        assertThat(registrationRequest.getPath()).isEqualTo("/api/agent/execute");
         assertThat(registrationRequest.getBody().readUtf8())
                 .contains("\"chatId\":\"chat-2\"")
                 .contains("\"userId\":\"user-test-002\"")
                 .contains("\"action\":\"create\"")
                 .contains("\"departmentCode\":\"RESP\"")
-                .contains("\"departmentName\":\"呼吸内科\"")
+                .contains("\"departmentName\":\"Respiratory\"")
                 .contains("\"orchestration\":\"TRIAGE_THEN_REGISTRATION\"");
+    }
+
+    @Test
+    void shouldFallbackToLegacyEndpointWhenUnifiedEndpointIsUnavailable() throws Exception {
+        registrationAgentServer.enqueue(new MockResponse().setResponseCode(404));
+        registrationAgentServer.enqueue(jsonResponse("""
+                {
+                  "chatId":"chat-1",
+                  "route":"REGISTRATION",
+                  "message":"legacy registration preview",
+                  "requiresConfirmation":true,
+                  "data":{
+                    "action":"create",
+                    "departmentCode":"RESP"
+                  }
+                }
+                """));
+
+        ChatResponse response = service.route(new ChatRequest(
+                "chat-1",
+                "user-test-001",
+                "book respiratory appointment",
+                Map.of("action", "create", "departmentCode", "RESP")
+        )).block();
+
+        assertThat(response).isNotNull();
+        assertThat(response.route()).isEqualTo(AgentRoute.REGISTRATION);
+        assertThat(response.message()).isEqualTo("legacy registration preview");
+        assertThat(response.data()).containsEntry("departmentCode", "RESP");
+
+        RecordedRequest unifiedRequest = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
+        assertThat(unifiedRequest).isNotNull();
+        assertThat(unifiedRequest.getPath()).isEqualTo("/api/agent/execute");
+
+        RecordedRequest legacyRequest = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
+        assertThat(legacyRequest).isNotNull();
+        assertThat(legacyRequest.getPath()).isEqualTo("/api/registration");
     }
 
     private MockResponse jsonResponse(String body) {

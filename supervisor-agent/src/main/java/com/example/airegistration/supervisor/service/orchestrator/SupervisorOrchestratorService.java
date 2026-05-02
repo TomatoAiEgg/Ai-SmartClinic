@@ -44,15 +44,17 @@ public class SupervisorOrchestratorService implements SupervisorRoutingUseCase {
 
     private Mono<ChatResponse> route(ChatRequest request, RouteDecision decision) {
         AgentRoute route = decision.route();
-        log.info("[supervisor] route decided trace_id={} chat_id={} user_id={} route={} source={} rule_route={} model_route={} confidence={} reason={} message_length={} metadata_keys={}",
+        log.info("[supervisor] route decided trace_id={} chat_id={} user_id={} route={} target_agent={} source={} rule_route={} model_route={} confidence={} safety_level={} reason={} message_length={} metadata_keys={}",
                 request.traceId(),
                 request.chatId(),
                 request.userId(),
                 route,
+                decision.targetAgent(),
                 decision.source(),
                 decision.ruleRoute(),
                 decision.modelRoute(),
                 decision.confidence(),
+                decision.safetyLevel(),
                 decision.reason(),
                 request.message() == null ? 0 : request.message().length(),
                 request.metadata().keySet());
