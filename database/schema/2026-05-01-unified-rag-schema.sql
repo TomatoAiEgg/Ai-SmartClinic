@@ -1,5 +1,9 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE SCHEMA IF NOT EXISTS ai_registration;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA ai_registration;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA ai_registration;
+
+SET search_path TO ai_registration;
 
 CREATE TABLE IF NOT EXISTS knowledge_document (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
