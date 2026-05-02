@@ -64,6 +64,9 @@ app:
     knowledge-ingest:
       chunk-max-chars: ${APP_AI_KNOWLEDGE_INGEST_CHUNK_MAX_CHARS:900}
       chunk-overlap-chars: ${APP_AI_KNOWLEDGE_INGEST_CHUNK_OVERLAP_CHARS:120}
+    knowledge-admin:
+      token: ${APP_AI_KNOWLEDGE_ADMIN_TOKEN:}
+      header-name: ${APP_AI_KNOWLEDGE_ADMIN_HEADER:X-Knowledge-Admin-Token}
 
 management:
   endpoints:

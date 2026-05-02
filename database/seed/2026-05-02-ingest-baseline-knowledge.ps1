@@ -1,5 +1,6 @@
 ﻿param(
-    [string]$BaseUrl = "http://127.0.0.1:10084"
+    [string]$BaseUrl = "http://127.0.0.1:10084",
+    [string]$AdminToken = $env:APP_AI_KNOWLEDGE_ADMIN_TOKEN
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,11 +29,15 @@ function Invoke-KnowledgeIngest {
     )
 
     $json = $Payload | ConvertTo-Json -Depth 20
+    $headers = @{ "X-Trace-Id" = "seed-knowledge-2026-05-02" }
+    if (-not [string]::IsNullOrWhiteSpace($AdminToken)) {
+        $headers["X-Knowledge-Admin-Token"] = $AdminToken
+    }
     Invoke-RestMethod `
         -Method Post `
         -Uri "$BaseUrl/api/knowledge/ingest" `
         -ContentType "application/json; charset=utf-8" `
-        -Headers @{ "X-Trace-Id" = "seed-knowledge-2026-05-02" } `
+        -Headers $headers `
         -Body $json
 }
 

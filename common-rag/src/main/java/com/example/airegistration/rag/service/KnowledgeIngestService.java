@@ -20,23 +20,31 @@ import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 public class KnowledgeIngestService {
 
     private final NamedParameterJdbcOperations jdbcOperations;
     private final ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     public KnowledgeIngestService(NamedParameterJdbcOperations jdbcOperations,
                                   ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,
                                   ObjectMapper objectMapper) {
+        this(jdbcOperations, embeddingClientProvider, objectMapper, null);
+    }
+
+    public KnowledgeIngestService(NamedParameterJdbcOperations jdbcOperations,
+                                  ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,
+                                  ObjectMapper objectMapper,
+                                  ObjectProvider<TransactionTemplate> transactionTemplateProvider) {
         this.jdbcOperations = jdbcOperations;
         this.embeddingClientProvider = embeddingClientProvider;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionTemplateProvider == null ? null : transactionTemplateProvider.getIfAvailable();
     }
 
-    @Transactional
     public KnowledgeIngestResult ingest(KnowledgeIngestRequest request) {
         FallbackEmbeddingClient embeddingClient = embeddingClientProvider.getIfAvailable();
         if (embeddingClient == null) {
@@ -44,31 +52,63 @@ public class KnowledgeIngestService {
         }
 
         UUID jobId = createJob(request);
-        List<UUID> documentIds = new ArrayList<>();
-        int chunkCount = 0;
         try {
-            for (KnowledgeDocumentInput document : request.documents()) {
-                UUID documentId = upsertDocument(document);
-                documentIds.add(documentId);
-                disableExistingChunks(documentId);
-                for (KnowledgeChunkInput chunk : document.chunks()) {
-                    insertChunk(documentId, document.namespace(), chunk, request, embeddingClient);
-                    chunkCount++;
-                }
-            }
+            List<PreparedDocument> preparedDocuments = prepareDocuments(request, embeddingClient);
+            IngestWriteResult writeResult = writeDocuments(preparedDocuments, request);
+            int chunkCount = writeResult.chunkCount();
             finishJob(jobId, KnowledgeIngestJobStatus.SUCCEEDED, request.documents().size(), chunkCount, null);
             return new KnowledgeIngestResult(
                     jobId,
                     KnowledgeIngestJobStatus.SUCCEEDED,
                     request.documents().size(),
                     chunkCount,
-                    documentIds,
+                    writeResult.documentIds(),
                     ""
             );
         } catch (RuntimeException ex) {
-            finishJob(jobId, KnowledgeIngestJobStatus.FAILED, documentIds.size(), chunkCount, ex.getMessage());
+            finishJob(jobId, KnowledgeIngestJobStatus.FAILED, 0, 0, ex.getMessage());
             throw ex;
         }
+    }
+
+    private List<PreparedDocument> prepareDocuments(KnowledgeIngestRequest request,
+                                                    FallbackEmbeddingClient embeddingClient) {
+        List<PreparedDocument> preparedDocuments = new ArrayList<>();
+        for (KnowledgeDocumentInput document : request.documents()) {
+            List<PreparedChunk> preparedChunks = new ArrayList<>();
+            for (KnowledgeChunkInput chunk : document.chunks()) {
+                float[] embedding = embeddingClient.embed(chunk.content());
+                validateEmbeddingDimensions(document, chunk, request, embedding);
+                preparedChunks.add(new PreparedChunk(chunk, VectorLiteral.from(embedding)));
+            }
+            preparedDocuments.add(new PreparedDocument(document, preparedChunks));
+        }
+        return preparedDocuments;
+    }
+
+    private IngestWriteResult writeDocuments(List<PreparedDocument> preparedDocuments,
+                                             KnowledgeIngestRequest request) {
+        if (transactionTemplate == null) {
+            return writeDocumentsInCurrentContext(preparedDocuments, request);
+        }
+        return transactionTemplate.execute(status -> writeDocumentsInCurrentContext(preparedDocuments, request));
+    }
+
+    private IngestWriteResult writeDocumentsInCurrentContext(List<PreparedDocument> preparedDocuments,
+                                                             KnowledgeIngestRequest request) {
+        List<UUID> documentIds = new ArrayList<>();
+        int chunkCount = 0;
+        for (PreparedDocument preparedDocument : preparedDocuments) {
+            KnowledgeDocumentInput document = preparedDocument.document();
+            UUID documentId = upsertDocument(document);
+            documentIds.add(documentId);
+            disableExistingChunks(documentId);
+            for (PreparedChunk preparedChunk : preparedDocument.chunks()) {
+                insertChunk(documentId, document.namespace(), preparedChunk, request);
+                chunkCount++;
+            }
+        }
+        return new IngestWriteResult(documentIds, chunkCount);
     }
 
     private UUID createJob(KnowledgeIngestRequest request) {
@@ -133,10 +173,9 @@ public class KnowledgeIngestService {
 
     private void insertChunk(UUID documentId,
                              String namespace,
-                             KnowledgeChunkInput chunk,
-                             KnowledgeIngestRequest request,
-                             FallbackEmbeddingClient embeddingClient) {
-        String embedding = VectorLiteral.from(embeddingClient.embed(chunk.content()));
+                             PreparedChunk preparedChunk,
+                             KnowledgeIngestRequest request) {
+        KnowledgeChunkInput chunk = preparedChunk.chunk();
         jdbcOperations.update("""
                 INSERT INTO knowledge_chunk (
                     document_id, namespace, chunk_index, chunk_type, title, content,
@@ -171,7 +210,26 @@ public class KnowledgeIngestService {
                 .addValue("metadata", toJson(chunk.metadata()))
                 .addValue("embeddingModel", request.embeddingModel())
                 .addValue("embeddingDimensions", request.embeddingDimensions())
-                .addValue("embedding", embedding));
+                .addValue("embedding", preparedChunk.embedding()));
+    }
+
+    private void validateEmbeddingDimensions(KnowledgeDocumentInput document,
+                                             KnowledgeChunkInput chunk,
+                                             KnowledgeIngestRequest request,
+                                             float[] embedding) {
+        int actualDimensions = embedding == null ? 0 : embedding.length;
+        if (actualDimensions != request.embeddingDimensions()) {
+            throw new IllegalStateException(
+                    "Embedding dimensions mismatch for namespace %s sourceId %s chunkIndex %d: expected %d but got %d"
+                            .formatted(
+                                    document.namespace(),
+                                    document.sourceId(),
+                                    chunk.chunkIndex(),
+                                    request.embeddingDimensions(),
+                                    actualDimensions
+                            )
+            );
+        }
     }
 
     private void finishJob(UUID jobId,
@@ -210,5 +268,14 @@ public class KnowledgeIngestService {
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 digest is unavailable", ex);
         }
+    }
+
+    private record PreparedDocument(KnowledgeDocumentInput document, List<PreparedChunk> chunks) {
+    }
+
+    private record PreparedChunk(KnowledgeChunkInput chunk, String embedding) {
+    }
+
+    private record IngestWriteResult(List<UUID> documentIds, int chunkCount) {
     }
 }

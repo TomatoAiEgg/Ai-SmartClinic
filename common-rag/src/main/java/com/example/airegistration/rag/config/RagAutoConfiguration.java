@@ -16,6 +16,8 @@ import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @AutoConfiguration(after = {DataSourceAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
 @ConditionalOnClass(NamedParameterJdbcOperations.class)
@@ -46,11 +48,19 @@ public class RagAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(PlatformTransactionManager.class)
+    @ConditionalOnMissingBean
+    public TransactionTemplate ragTransactionTemplate(PlatformTransactionManager transactionManager) {
+        return new TransactionTemplate(transactionManager);
+    }
+
+    @Bean
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
     public KnowledgeIngestService knowledgeIngestService(NamedParameterJdbcOperations jdbcOperations,
                                                          ObjectProvider<FallbackEmbeddingClient> embeddingClientProvider,
-                                                         ObjectMapper objectMapper) {
-        return new KnowledgeIngestService(jdbcOperations, embeddingClientProvider, objectMapper);
+                                                         ObjectMapper objectMapper,
+                                                         ObjectProvider<TransactionTemplate> transactionTemplateProvider) {
+        return new KnowledgeIngestService(jdbcOperations, embeddingClientProvider, objectMapper, transactionTemplateProvider);
     }
 }

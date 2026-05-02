@@ -1,5 +1,7 @@
 package com.example.airegistration.rag.core;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public record RagSearchHit(
@@ -11,6 +13,8 @@ public record RagSearchHit(
         Map<String, Object> attributes
 ) {
     public RagSearchHit {
-        attributes = Map.copyOf(attributes == null ? Map.of() : attributes);
+        attributes = attributes == null
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
     }
 }

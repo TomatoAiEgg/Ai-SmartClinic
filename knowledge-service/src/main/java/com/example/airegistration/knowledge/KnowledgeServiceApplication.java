@@ -1,12 +1,13 @@
 package com.example.airegistration.knowledge;
 
+import com.example.airegistration.knowledge.config.KnowledgeAdminProperties;
 import com.example.airegistration.knowledge.config.KnowledgeIngestProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties(KnowledgeIngestProperties.class)
+@EnableConfigurationProperties({KnowledgeIngestProperties.class, KnowledgeAdminProperties.class})
 public class KnowledgeServiceApplication {
 
     public static void main(String[] args) {

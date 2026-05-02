@@ -3,6 +3,7 @@ package com.example.airegistration.rag.core;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -78,5 +79,15 @@ class RagSearchSpecTest {
         assertThat(chunks.get(0).content()).hasSize(300);
         assertThat(chunks.get(1).content()).hasSize(270);
         assertThat(chunks.get(0).metadata()).containsEntry("chunker", "simple-text");
+    }
+
+    @Test
+    void shouldAllowNullHitAttributesFromOptionalMetadataColumns() {
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put("departmentCode", null);
+
+        RagSearchHit hit = new RagSearchHit("id", "title", "content", "{}", 0.8D, attributes);
+
+        assertThat(hit.attributes()).containsEntry("departmentCode", null);
     }
 }
