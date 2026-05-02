@@ -56,26 +56,28 @@ public class AgentClient {
     }
 
     private Mono<ChatResponse> callAgent(AgentRoute route, ChatRequest request) {
-        RegisteredAgent agent = agentRegistry.requireAgent(route);
-        WebClient client = webClientBuilder.clone()
-                .baseUrl(agent.baseUrl())
-                .build();
-        log.info("[supervisor->{}] request trace_id={} chat_id={} user_id={} path={}",
-                agent.agentName(),
-                request.traceId(),
-                request.chatId(),
-                request.userId(),
-                EXECUTE_PATH);
-        return callUnifiedAgent(agent, client, request)
-                .onErrorResume(error -> shouldFallbackToLegacy(error), error -> {
-                    log.warn("[supervisor->{}] unified endpoint unavailable, fallback legacy trace_id={} chat_id={} legacy_path={} reason={}",
-                            agent.agentName(),
-                            request.traceId(),
-                            request.chatId(),
-                            agent.legacyPath(),
-                            error.getMessage());
-                    return callLegacyAgent(agent, client, request);
-                });
+        return Mono.defer(() -> {
+            RegisteredAgent agent = agentRegistry.requireAgent(route);
+            WebClient client = webClientBuilder.clone()
+                    .baseUrl(agent.baseUrl())
+                    .build();
+            log.info("[supervisor->{}] request trace_id={} chat_id={} user_id={} path={}",
+                    agent.agentName(),
+                    request.traceId(),
+                    request.chatId(),
+                    request.userId(),
+                    EXECUTE_PATH);
+            return callUnifiedAgent(agent, client, request)
+                    .onErrorResume(error -> shouldFallbackToLegacy(error), error -> {
+                        log.warn("[supervisor->{}] unified endpoint unavailable, fallback legacy trace_id={} chat_id={} legacy_path={} reason={}",
+                                agent.agentName(),
+                                request.traceId(),
+                                request.chatId(),
+                                agent.legacyPath(),
+                                error.getMessage());
+                        return callLegacyAgent(agent, client, request);
+                    });
+        });
     }
 
     private Mono<ChatResponse> callUnifiedAgent(RegisteredAgent agent, WebClient client, ChatRequest request) {

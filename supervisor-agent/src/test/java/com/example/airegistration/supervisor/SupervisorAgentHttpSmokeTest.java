@@ -3,6 +3,7 @@ package com.example.airegistration.supervisor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,7 +36,7 @@ class SupervisorAgentHttpSmokeTest {
 
     @Test
     void shouldRouteRegistrationRequestsThroughHttpEndpoint() {
-        when(agentClient.callRegistration(any(ChatRequest.class))).thenReturn(Mono.just(new ChatResponse(
+        when(agentClient.call(eq(AgentRoute.REGISTRATION), any(ChatRequest.class))).thenReturn(Mono.just(new ChatResponse(
                 "chat-1",
                 AgentRoute.REGISTRATION,
                 "registration route ok",
@@ -60,7 +61,7 @@ class SupervisorAgentHttpSmokeTest {
         assertThat(response).isNotNull();
         assertThat(response.route()).isEqualTo(AgentRoute.REGISTRATION);
         assertThat(response.requiresConfirmation()).isTrue();
-        verify(agentClient).callRegistration(argThat(request ->
+        verify(agentClient).call(eq(AgentRoute.REGISTRATION), argThat(request ->
                 "chat-1".equals(request.chatId())
                         && "user-1".equals(request.userId())
                         && "create".equals(request.metadata().get("action"))

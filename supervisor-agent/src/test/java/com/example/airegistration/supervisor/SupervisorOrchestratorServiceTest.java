@@ -152,6 +152,15 @@ class SupervisorOrchestratorServiceTest {
                 .containsEntry("departmentCode", "RESP")
                 .containsKey("orchestration")
                 .containsKey("upstreamTriage");
+        Map<?, ?> orchestration = (Map<?, ?>) response.data().get("orchestration");
+        assertThat(orchestration.get("mode")).isEqualTo("TRIAGE_THEN_REGISTRATION");
+        assertThat(orchestration.get("status")).isEqualTo("registration_handoff");
+        assertThat(orchestration.get("upstreamRoute")).isEqualTo("TRIAGE");
+        Map<?, ?> handoff = (Map<?, ?>) orchestration.get("handoff");
+        assertThat(handoff.get("sourceRoute")).isEqualTo("TRIAGE");
+        assertThat(handoff.get("targetRoute")).isEqualTo("REGISTRATION");
+        assertThat(handoff.get("departmentCode")).isEqualTo("RESP");
+        assertThat(handoff.get("triageReason")).isEqualTo("fever and cough fit respiratory clinic");
 
         RecordedRequest triageRequest = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
         assertThat(triageRequest).isNotNull();
@@ -168,7 +177,45 @@ class SupervisorOrchestratorServiceTest {
                 .contains("\"action\":\"create\"")
                 .contains("\"departmentCode\":\"RESP\"")
                 .contains("\"departmentName\":\"Respiratory\"")
-                .contains("\"orchestration\":\"TRIAGE_THEN_REGISTRATION\"");
+                .contains("\"orchestration\":\"TRIAGE_THEN_REGISTRATION\"")
+                .contains("\"handoff.mode\":\"TRIAGE_THEN_REGISTRATION\"")
+                .contains("\"handoff.sourceRoute\":\"TRIAGE\"")
+                .contains("\"handoff.targetRoute\":\"REGISTRATION\"")
+                .contains("\"handoff.status\":\"registration_handoff\"")
+                .contains("\"handoff.departmentCode\":\"RESP\"");
+    }
+
+    @Test
+    void shouldRouteGuideDecisionThroughRegistryClient() throws Exception {
+        when(routeClassifier.determineRoute(any(ChatRequest.class)))
+                .thenReturn(Mono.just(RouteDecision.rule(AgentRoute.GUIDE, "test")));
+        registrationAgentServer.enqueue(jsonResponse("""
+                {
+                  "route":"GUIDE",
+                  "message":"guide answer",
+                  "requiresConfirmation":false,
+                  "structuredData":{
+                    "source":"guide-agent-rag"
+                  }
+                }
+                """));
+
+        ChatResponse response = service.route(new ChatRequest(
+                "chat-guide",
+                "user-test-003",
+                "where should I park?",
+                Map.of()
+        )).block();
+
+        assertThat(response).isNotNull();
+        assertThat(response.route()).isEqualTo(AgentRoute.GUIDE);
+        assertThat(response.message()).isEqualTo("guide answer");
+        assertThat(response.data()).containsEntry("source", "guide-agent-rag");
+
+        RecordedRequest request = registrationAgentServer.takeRequest(1, TimeUnit.SECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getMethod()).isEqualTo("POST");
+        assertThat(request.getPath()).isEqualTo("/api/agent/execute");
     }
 
     @Test

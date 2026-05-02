@@ -63,83 +63,98 @@ public class SupervisorOrchestratorService implements SupervisorRoutingUseCase {
                     Map.of("reason", "red_flag_symptom"));
         }
         if (orchestrationPolicy.shouldTriageThenRegistration(request, decision)) {
-            return triageThenRegistration(request);
+            return triageThenRegistration(request, decision);
         }
 
-        return switch (route) {
-            case TRIAGE -> agentClient.callTriage(request);
-            case REGISTRATION -> agentClient.callRegistration(request);
-            case GUIDE -> agentClient.callGuide(request);
-            default -> replyService.reply(request, route, SupervisorReplyScene.ROUTE_UNCLEAR, Map.of());
-        };
+        return agentClient.call(route, request)
+                .onErrorResume(IllegalArgumentException.class,
+                        error -> replyService.reply(request, route, SupervisorReplyScene.ROUTE_UNCLEAR,
+                                Map.of("reason", error.getMessage())));
     }
 
-    private Mono<ChatResponse> triageThenRegistration(ChatRequest request) {
+    private Mono<ChatResponse> triageThenRegistration(ChatRequest request, RouteDecision decision) {
         log.info("[supervisor] orchestration started trace_id={} chat_id={} mode=TRIAGE_THEN_REGISTRATION",
                 request.traceId(),
                 request.chatId());
-        return agentClient.callTriage(request)
+        return agentClient.call(AgentRoute.TRIAGE, request)
                 .flatMap(triageResponse -> {
                     if (isEmergency(triageResponse)) {
+                        Map<String, String> handoffMetadata = SupervisorHandoffMetadata.triageToRegistration(
+                                triageResponse,
+                                SupervisorHandoffMetadata.STATUS_TRIAGE_EMERGENCY_STOP
+                        );
                         log.info("[supervisor] orchestration stopped by triage emergency trace_id={} chat_id={}",
                                 request.traceId(),
                                 request.chatId());
                         return Mono.just(withOrchestrationData(
                                 triageResponse,
-                                "TRIAGE_THEN_REGISTRATION",
-                                "triage_emergency_stop",
-                                triageResponse
+                                SupervisorHandoffMetadata.STATUS_TRIAGE_EMERGENCY_STOP,
+                                triageResponse,
+                                handoffMetadata
                         ));
                     }
 
                     String departmentCode = stringValue(triageResponse.data().get("departmentCode"));
                     if (isBlank(departmentCode)) {
+                        Map<String, String> handoffMetadata = SupervisorHandoffMetadata.triageToRegistration(
+                                triageResponse,
+                                SupervisorHandoffMetadata.STATUS_TRIAGE_NO_DEPARTMENT
+                        );
                         log.info("[supervisor] orchestration stopped because triage returned no department trace_id={} chat_id={}",
                                 request.traceId(),
                                 request.chatId());
                         return Mono.just(withOrchestrationData(
                                 triageResponse,
-                                "TRIAGE_THEN_REGISTRATION",
-                                "triage_no_department",
-                                triageResponse
+                                SupervisorHandoffMetadata.STATUS_TRIAGE_NO_DEPARTMENT,
+                                triageResponse,
+                                handoffMetadata
                         ));
                     }
 
-                    ChatRequest registrationRequest = registrationRequest(request, triageResponse);
-                    log.info("[supervisor] orchestration handoff trace_id={} chat_id={} from=TRIAGE to=REGISTRATION department_code={}",
+                    Map<String, String> handoffMetadata = SupervisorHandoffMetadata.triageToRegistration(
+                            triageResponse,
+                            SupervisorHandoffMetadata.STATUS_REGISTRATION_HANDOFF
+                    );
+                    RouteDecision handoffDecision = decision.withHandoffMetadata(handoffMetadata);
+                    ChatRequest registrationRequest = registrationRequest(request, handoffDecision);
+                    log.info("[supervisor] orchestration handoff trace_id={} chat_id={} from=TRIAGE to=REGISTRATION department_code={} handoff_keys={}",
                             request.traceId(),
                             request.chatId(),
-                            departmentCode);
-                    return agentClient.callRegistration(registrationRequest)
+                            departmentCode,
+                            handoffDecision.handoffMetadata().keySet());
+                    return agentClient.call(AgentRoute.REGISTRATION, registrationRequest)
                             .map(registrationResponse -> withOrchestrationData(
                                     registrationResponse,
-                                    "TRIAGE_THEN_REGISTRATION",
-                                    "registration_handoff",
-                                    triageResponse
+                                    SupervisorHandoffMetadata.STATUS_REGISTRATION_HANDOFF,
+                                    triageResponse,
+                                    handoffMetadata
                             ));
                 });
     }
 
-    private ChatRequest registrationRequest(ChatRequest request, ChatResponse triageResponse) {
+    private ChatRequest registrationRequest(ChatRequest request, RouteDecision handoffDecision) {
+        Map<String, String> handoffMetadata = handoffDecision.handoffMetadata();
         Map<String, String> metadata = new HashMap<>(request.metadata());
         metadata.putIfAbsent("action", "create");
-        metadata.put("orchestration", "TRIAGE_THEN_REGISTRATION");
-        putIfText(metadata, "departmentCode", stringValue(triageResponse.data().get("departmentCode")));
-        putIfText(metadata, "departmentName", stringValue(triageResponse.data().get("departmentName")));
-        putIfText(metadata, "triageEmergency", stringValue(triageResponse.data().get("emergency")));
-        putIfText(metadata, "triageReason", stringValue(triageResponse.data().get("reason")));
+        metadata.put("orchestration", SupervisorHandoffMetadata.MODE_TRIAGE_THEN_REGISTRATION);
+        metadata.putAll(handoffMetadata);
+        putIfText(metadata, "departmentCode", SupervisorHandoffMetadata.departmentCode(handoffMetadata));
+        putIfText(metadata, "departmentName", SupervisorHandoffMetadata.departmentName(handoffMetadata));
+        putIfText(metadata, "triageEmergency", SupervisorHandoffMetadata.emergency(handoffMetadata));
+        putIfText(metadata, "triageReason", SupervisorHandoffMetadata.triageReason(handoffMetadata));
         return new ChatRequest(request.chatId(), request.userId(), request.message(), Map.copyOf(metadata), request.traceId());
     }
 
     private ChatResponse withOrchestrationData(ChatResponse response,
-                                               String mode,
                                                String status,
-                                               ChatResponse triageResponse) {
+                                               ChatResponse triageResponse,
+                                               Map<String, String> handoffMetadata) {
         Map<String, Object> data = new HashMap<>(response.data());
         data.put("orchestration", Map.of(
-                "mode", mode,
+                "mode", SupervisorHandoffMetadata.MODE_TRIAGE_THEN_REGISTRATION,
                 "status", status,
-                "upstreamRoute", AgentRoute.TRIAGE.name()
+                "upstreamRoute", AgentRoute.TRIAGE.name(),
+                "handoff", SupervisorHandoffMetadata.responseSummary(handoffMetadata)
         ));
         data.put("upstreamTriage", Map.copyOf(triageResponse.data()));
         return new ChatResponse(
