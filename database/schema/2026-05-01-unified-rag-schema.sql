@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS knowledge_document (
     title VARCHAR(500) NOT NULL,
     content_sha256 CHAR(64) NOT NULL,
     version VARCHAR(80) NOT NULL DEFAULT 'v1',
-    status VARCHAR(40) NOT NULL DEFAULT 'ACTIVE',
+    status VARCHAR(40) NOT NULL DEFAULT 'DRAFT',
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS knowledge_document (
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_document_namespace_status
     ON knowledge_document (namespace, status);
+
+COMMENT ON COLUMN knowledge_document.status IS
+    'Knowledge release state. Supported lifecycle: DRAFT, ACTIVE, ARCHIVED. Legacy DISABLED should be treated as DRAFT.';
 
 CREATE TABLE IF NOT EXISTS knowledge_chunk (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -67,7 +70,7 @@ CREATE TABLE IF NOT EXISTS knowledge_ingest_job (
     source_id VARCHAR(160) NOT NULL,
     source_name VARCHAR(240),
     document_id UUID REFERENCES knowledge_document(id) ON DELETE SET NULL,
-    status VARCHAR(40) NOT NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'PENDING',
     embedding_model VARCHAR(120),
     embedding_dimensions INTEGER,
     document_count INTEGER NOT NULL DEFAULT 0,
@@ -80,6 +83,9 @@ CREATE TABLE IF NOT EXISTS knowledge_ingest_job (
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_ingest_job_namespace_status
     ON knowledge_ingest_job (namespace, status, started_at DESC);
+
+COMMENT ON COLUMN knowledge_ingest_job.status IS
+    'Ingest lifecycle state: PENDING, RUNNING, SUCCEEDED, PARTIALLY_FAILED, FAILED.';
 
 CREATE TABLE IF NOT EXISTS knowledge_retrieval_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -105,3 +111,6 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_retrieval_log_trace
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_retrieval_log_namespace_created
     ON knowledge_retrieval_log (namespace, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_retrieval_log_status_created
+    ON knowledge_retrieval_log (status, created_at DESC);

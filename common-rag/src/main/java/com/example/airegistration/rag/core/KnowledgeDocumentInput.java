@@ -11,6 +11,7 @@ public record KnowledgeDocumentInput(
         String title,
         String version,
         String rawContent,
+        String status,
         Map<String, Object> metadata,
         List<KnowledgeChunkInput> chunks
 ) {
@@ -22,11 +23,24 @@ public record KnowledgeDocumentInput(
         title = requireText(title, "title");
         version = version == null || version.isBlank() ? "v1" : version.trim();
         rawContent = requireText(rawContent, "rawContent");
+        status = status == null || status.isBlank() ? "DRAFT" : status.trim().toUpperCase(java.util.Locale.ROOT);
         metadata = Map.copyOf(metadata == null ? Map.of() : metadata);
         chunks = List.copyOf(chunks == null ? List.of() : chunks);
         if (chunks.isEmpty()) {
             throw new IllegalArgumentException("chunks must not be empty");
         }
+    }
+
+    public KnowledgeDocumentInput(String namespace,
+                                  String sourceId,
+                                  String sourceName,
+                                  String documentType,
+                                  String title,
+                                  String version,
+                                  String rawContent,
+                                  Map<String, Object> metadata,
+                                  List<KnowledgeChunkInput> chunks) {
+        this(namespace, sourceId, sourceName, documentType, title, version, rawContent, null, metadata, chunks);
     }
 
     private static String requireText(String value, String field) {

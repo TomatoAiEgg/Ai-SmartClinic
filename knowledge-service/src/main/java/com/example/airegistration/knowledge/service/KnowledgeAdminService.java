@@ -4,12 +4,14 @@ import com.example.airegistration.knowledge.dto.KnowledgeChunkView;
 import com.example.airegistration.knowledge.dto.KnowledgeDocumentView;
 import com.example.airegistration.knowledge.dto.KnowledgeIngestJobView;
 import com.example.airegistration.knowledge.dto.KnowledgeRetrievalLogView;
+import com.example.airegistration.knowledge.dto.KnowledgeRetrievalStatsView;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -125,6 +127,28 @@ public class KnowledgeAdminService {
         return jdbcOperations.query(query.sql.toString(), query.parameters, this::toRetrievalLogView);
     }
 
+    public KnowledgeRetrievalStatsView retrievalStats(String namespace, Integer hours) {
+        int windowHours = safeHours(hours);
+        QueryParts query = new QueryParts("""
+                SELECT
+                    COALESCE(:namespaceLabel, 'ALL') AS namespace_label,
+                    COUNT(*) AS total_count,
+                    SUM(CASE WHEN status = 'HIT' THEN 1 ELSE 0 END) AS hit_count,
+                    SUM(CASE WHEN status IN ('EMPTY_RESULT', 'EMPTY_QUERY') THEN 1 ELSE 0 END) AS empty_result_count,
+                    SUM(CASE WHEN status IN ('RETRIEVAL_ERROR', 'EMBEDDING_UNAVAILABLE') THEN 1 ELSE 0 END) AS error_count,
+                    AVG(latency_ms) AS avg_latency_ms,
+                    AVG(best_score) AS avg_best_score,
+                    MIN(created_at) AS from_at,
+                    MAX(created_at) AS to_at
+                FROM knowledge_retrieval_log
+                WHERE created_at >= now() - (:hours * interval '1 hour')
+                """);
+        query.parameters.addValue("hours", windowHours);
+        query.parameters.addValue("namespaceLabel", hasText(namespace) ? namespace.trim() : null);
+        query.addTextFilter("namespace", namespace);
+        return jdbcOperations.queryForObject(query.sql.toString(), query.parameters, this::toRetrievalStatsView);
+    }
+
     @Transactional
     public KnowledgeDocumentView updateDocumentStatus(UUID documentId, String status) {
         String normalizedStatus = requireDocumentStatus(status);
@@ -224,6 +248,28 @@ public class KnowledgeAdminService {
         );
     }
 
+    private KnowledgeRetrievalStatsView toRetrievalStatsView(ResultSet rs, int rowNum) throws SQLException {
+        long total = rs.getLong("total_count");
+        long hit = rs.getLong("hit_count");
+        long empty = rs.getLong("empty_result_count");
+        long error = rs.getLong("error_count");
+        Double avgLatencyMs = nullableDouble(rs, "avg_latency_ms");
+        return new KnowledgeRetrievalStatsView(
+                rs.getString("namespace_label"),
+                total,
+                hit,
+                empty,
+                error,
+                rate(hit, total),
+                rate(empty, total),
+                rate(error, total),
+                avgLatencyMs == null ? 0D : avgLatencyMs,
+                nullableDouble(rs, "avg_best_score"),
+                instant(rs, "from_at"),
+                instant(rs, "to_at")
+        );
+    }
+
     private String normalizeOptionalStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
@@ -233,10 +279,32 @@ public class KnowledgeAdminService {
 
     private String requireDocumentStatus(String status) {
         String normalizedStatus = normalizeOptionalStatus(status);
-        if (normalizedStatus == null || !List.of("ACTIVE", "DISABLED", "ARCHIVED").contains(normalizedStatus)) {
-            throw new IllegalArgumentException("status must be ACTIVE, DISABLED, or ARCHIVED");
+        if ("DISABLED".equals(normalizedStatus)) {
+            return "DRAFT";
+        }
+        if (normalizedStatus == null || !List.of("DRAFT", "ACTIVE", "ARCHIVED").contains(normalizedStatus)) {
+            throw new IllegalArgumentException("status must be DRAFT, ACTIVE, or ARCHIVED");
         }
         return normalizedStatus;
+    }
+
+    private int safeHours(Integer hours) {
+        int resolved = hours == null ? 24 : hours;
+        if (resolved <= 0) {
+            return 24;
+        }
+        return (int) Math.min(Duration.ofDays(90).toHours(), resolved);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private double rate(long numerator, long denominator) {
+        if (denominator <= 0) {
+            return 0D;
+        }
+        return (double) numerator / (double) denominator;
     }
 
     private int safeLimit(Integer limit) {

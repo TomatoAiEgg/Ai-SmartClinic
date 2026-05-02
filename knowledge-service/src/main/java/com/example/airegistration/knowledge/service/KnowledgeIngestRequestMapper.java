@@ -5,16 +5,17 @@ import com.example.airegistration.knowledge.config.KnowledgeIngestProperties;
 import com.example.airegistration.knowledge.dto.KnowledgeChunkPayload;
 import com.example.airegistration.knowledge.dto.KnowledgeDocumentPayload;
 import com.example.airegistration.knowledge.dto.KnowledgeIngestApiRequest;
+import com.example.airegistration.knowledge.service.parser.KnowledgeDocumentParserRegistry;
 import com.example.airegistration.rag.core.KnowledgeChunkInput;
 import com.example.airegistration.rag.core.KnowledgeDocumentInput;
 import com.example.airegistration.rag.core.KnowledgeIngestRequest;
-import com.example.airegistration.rag.core.SimpleTextChunker;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -22,11 +23,20 @@ public class KnowledgeIngestRequestMapper {
 
     private final AiModelFallbackProperties modelProperties;
     private final KnowledgeIngestProperties ingestProperties;
+    private final KnowledgeDocumentParserRegistry parserRegistry;
+
+    @Autowired
+    public KnowledgeIngestRequestMapper(AiModelFallbackProperties modelProperties,
+                                        KnowledgeIngestProperties ingestProperties,
+                                        KnowledgeDocumentParserRegistry parserRegistry) {
+        this.modelProperties = modelProperties;
+        this.ingestProperties = ingestProperties;
+        this.parserRegistry = parserRegistry == null ? KnowledgeDocumentParserRegistry.defaultRegistry() : parserRegistry;
+    }
 
     public KnowledgeIngestRequestMapper(AiModelFallbackProperties modelProperties,
                                         KnowledgeIngestProperties ingestProperties) {
-        this.modelProperties = modelProperties;
-        this.ingestProperties = ingestProperties;
+        this(modelProperties, ingestProperties, KnowledgeDocumentParserRegistry.defaultRegistry());
     }
 
     public KnowledgeIngestRequest toCoreRequest(KnowledgeIngestApiRequest request) {
@@ -110,6 +120,7 @@ public class KnowledgeIngestRequestMapper {
         List<KnowledgeChunkInput> chunks = mapChunks(
                 document,
                 rawContent,
+                title,
                 chunkMaxChars,
                 chunkOverlapChars
         );
@@ -122,6 +133,7 @@ public class KnowledgeIngestRequestMapper {
                 title,
                 document.version(),
                 rawContent,
+                document.status(),
                 document.metadata(),
                 chunks
         );
@@ -129,20 +141,18 @@ public class KnowledgeIngestRequestMapper {
 
     private List<KnowledgeChunkInput> mapChunks(KnowledgeDocumentPayload document,
                                                 String rawContent,
+                                                String title,
                                                 int chunkMaxChars,
                                                 int chunkOverlapChars) {
         if (document.chunks().isEmpty()) {
-            return SimpleTextChunker.chunk(rawContent, chunkMaxChars, chunkOverlapChars)
-                    .stream()
-                    .map(chunk -> new KnowledgeChunkInput(
-                            chunk.chunkIndex(),
-                            chunk.chunkType(),
-                            chunk.title(),
-                            chunk.content(),
-                            chunk.tokenCount(),
-                            mergeMetadata(document.metadata(), chunk.metadata())
-                    ))
-                    .toList();
+            return parserRegistry.parse(
+                    document.documentType(),
+                    title,
+                    rawContent,
+                    document.metadata(),
+                    chunkMaxChars,
+                    chunkOverlapChars
+            );
         }
 
         List<KnowledgeChunkInput> mapped = new ArrayList<>();

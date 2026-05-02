@@ -5,6 +5,7 @@ import com.example.airegistration.knowledge.dto.KnowledgeDocumentStatusUpdateReq
 import com.example.airegistration.knowledge.dto.KnowledgeDocumentView;
 import com.example.airegistration.knowledge.dto.KnowledgeIngestJobView;
 import com.example.airegistration.knowledge.dto.KnowledgeRetrievalLogView;
+import com.example.airegistration.knowledge.dto.KnowledgeRetrievalStatsView;
 import com.example.airegistration.knowledge.service.KnowledgeAdminService;
 import java.util.List;
 import java.util.UUID;
@@ -82,6 +83,14 @@ public class KnowledgeAdminController {
             @RequestParam(required = false) String namespace,
             @RequestParam(required = false) Integer limit) {
         return Mono.fromCallable(() -> adminService.listRetrievalLogs(namespace, limit))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @GetMapping("/retrieval-logs/stats")
+    public Mono<KnowledgeRetrievalStatsView> retrievalStats(
+            @RequestParam(required = false) String namespace,
+            @RequestParam(required = false) Integer hours) {
+        return Mono.fromCallable(() -> adminService.retrievalStats(namespace, hours))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 }

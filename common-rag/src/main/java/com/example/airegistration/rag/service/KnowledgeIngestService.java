@@ -53,6 +53,7 @@ public class KnowledgeIngestService {
 
         UUID jobId = createJob(request);
         try {
+            markJobRunning(jobId);
             List<PreparedDocument> preparedDocuments = prepareDocuments(request, embeddingClient);
             IngestWriteResult writeResult = writeDocuments(preparedDocuments, request);
             int chunkCount = writeResult.chunkCount();
@@ -79,7 +80,7 @@ public class KnowledgeIngestService {
             for (KnowledgeChunkInput chunk : document.chunks()) {
                 float[] embedding = embeddingClient.embed(chunk.content());
                 validateEmbeddingDimensions(document, chunk, request, embedding);
-                preparedChunks.add(new PreparedChunk(chunk, VectorLiteral.from(embedding)));
+                preparedChunks.add(new PreparedChunk(chunk, VectorLiteral.from(embedding), document.status()));
             }
             preparedDocuments.add(new PreparedDocument(document, preparedChunks));
         }
@@ -126,13 +127,24 @@ public class KnowledgeIngestService {
                 .addValue("namespace", request.namespace())
                 .addValue("sourceId", request.sourceId())
                 .addValue("sourceName", request.sourceName())
-                .addValue("status", KnowledgeIngestJobStatus.RUNNING.name())
+                .addValue("status", KnowledgeIngestJobStatus.PENDING.name())
                 .addValue("embeddingModel", request.embeddingModel())
                 .addValue("embeddingDimensions", request.embeddingDimensions())
                 .addValue("metadata", toJson(request.metadata())), UUID.class);
     }
 
+    private void markJobRunning(UUID jobId) {
+        jdbcOperations.update("""
+                UPDATE knowledge_ingest_job
+                SET status = :status
+                WHERE id = :jobId
+                """, new MapSqlParameterSource()
+                .addValue("jobId", jobId)
+                .addValue("status", KnowledgeIngestJobStatus.RUNNING.name()));
+    }
+
     private UUID upsertDocument(KnowledgeDocumentInput document) {
+        String status = normalizeDocumentStatus(document.status());
         return jdbcOperations.queryForObject("""
                 INSERT INTO knowledge_document (
                     namespace, source_id, source_name, document_type, title,
@@ -140,7 +152,7 @@ public class KnowledgeIngestService {
                 )
                 VALUES (
                     :namespace, :sourceId, :sourceName, :documentType, :title,
-                    :contentSha256, :version, 'ACTIVE', CAST(:metadata AS jsonb)
+                    :contentSha256, :version, :status, CAST(:metadata AS jsonb)
                 )
                 ON CONFLICT (namespace, source_id, version)
                 DO UPDATE SET
@@ -148,7 +160,7 @@ public class KnowledgeIngestService {
                     document_type = EXCLUDED.document_type,
                     title = EXCLUDED.title,
                     content_sha256 = EXCLUDED.content_sha256,
-                    status = 'ACTIVE',
+                    status = EXCLUDED.status,
                     metadata = EXCLUDED.metadata,
                     updated_at = now()
                 RETURNING id
@@ -160,6 +172,7 @@ public class KnowledgeIngestService {
                 .addValue("title", document.title())
                 .addValue("contentSha256", sha256(document.rawContent()))
                 .addValue("version", document.version())
+                .addValue("status", status)
                 .addValue("metadata", toJson(document.metadata())), UUID.class);
     }
 
@@ -176,6 +189,7 @@ public class KnowledgeIngestService {
                              PreparedChunk preparedChunk,
                              KnowledgeIngestRequest request) {
         KnowledgeChunkInput chunk = preparedChunk.chunk();
+        boolean enabled = "ACTIVE".equals(normalizeDocumentStatus(preparedChunk.documentStatus()));
         jdbcOperations.update("""
                 INSERT INTO knowledge_chunk (
                     document_id, namespace, chunk_index, chunk_type, title, content,
@@ -185,7 +199,7 @@ public class KnowledgeIngestService {
                 VALUES (
                     :documentId, :namespace, :chunkIndex, :chunkType, :title, :content,
                     :tokenCount, CAST(:metadata AS jsonb), :embeddingModel, :embeddingDimensions,
-                    CAST(:embedding AS vector), true
+                    CAST(:embedding AS vector), :enabled
                 )
                 ON CONFLICT (document_id, chunk_index)
                 DO UPDATE SET
@@ -197,7 +211,7 @@ public class KnowledgeIngestService {
                     embedding_model = EXCLUDED.embedding_model,
                     embedding_dimensions = EXCLUDED.embedding_dimensions,
                     embedding = EXCLUDED.embedding,
-                    enabled = true,
+                    enabled = EXCLUDED.enabled,
                     updated_at = now()
                 """, new MapSqlParameterSource()
                 .addValue("documentId", documentId)
@@ -210,7 +224,8 @@ public class KnowledgeIngestService {
                 .addValue("metadata", toJson(chunk.metadata()))
                 .addValue("embeddingModel", request.embeddingModel())
                 .addValue("embeddingDimensions", request.embeddingDimensions())
-                .addValue("embedding", preparedChunk.embedding()));
+                .addValue("embedding", preparedChunk.embedding())
+                .addValue("enabled", enabled));
     }
 
     private void validateEmbeddingDimensions(KnowledgeDocumentInput document,
@@ -270,10 +285,24 @@ public class KnowledgeIngestService {
         }
     }
 
+    private String normalizeDocumentStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "DRAFT";
+        }
+        String normalized = status.trim().toUpperCase(java.util.Locale.ROOT);
+        if ("DISABLED".equals(normalized)) {
+            return "DRAFT";
+        }
+        if (!List.of("DRAFT", "ACTIVE", "ARCHIVED").contains(normalized)) {
+            throw new IllegalArgumentException("document status must be DRAFT, ACTIVE, or ARCHIVED");
+        }
+        return normalized;
+    }
+
     private record PreparedDocument(KnowledgeDocumentInput document, List<PreparedChunk> chunks) {
     }
 
-    private record PreparedChunk(KnowledgeChunkInput chunk, String embedding) {
+    private record PreparedChunk(KnowledgeChunkInput chunk, String embedding, String documentStatus) {
     }
 
     private record IngestWriteResult(List<UUID> documentIds, int chunkCount) {

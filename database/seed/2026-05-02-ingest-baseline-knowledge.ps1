@@ -83,6 +83,7 @@ $requests = @(
                 documentType = "TRIAGE"
                 title = "分诊基础知识"
                 version = "2026-05-02"
+                status = "ACTIVE"
                 metadata = @{ sourceId = "triage-baseline-2026-05"; sourceName = "分诊基础知识 2026-05" }
                 chunks = $triageChunks
             }
@@ -102,6 +103,7 @@ $requests = @(
                 documentType = "GUIDE"
                 title = "导诊基础知识"
                 version = "2026-05-02"
+                status = "ACTIVE"
                 metadata = @{ sourceId = "guide-baseline-2026-05"; sourceName = "导诊基础知识 2026-05" }
                 chunks = $guideChunks
             }
@@ -121,6 +123,7 @@ $requests = @(
                 documentType = "REGISTRATION_POLICY"
                 title = "挂号策略基础规则"
                 version = "2026-05-02"
+                status = "ACTIVE"
                 metadata = @{ sourceId = "registration-policy-baseline-2026-05"; sourceName = "挂号策略基础规则 2026-05" }
                 chunks = $policyChunks
             }

@@ -51,10 +51,12 @@ class KnowledgeIngestRequestMapperTest {
         assertThat(core.embeddingDimensions()).isEqualTo(1536);
         assertThat(core.metadata()).containsEntry("operator", "seed");
         assertThat(core.documents()).hasSize(1);
+        assertThat(core.documents().get(0).status()).isEqualTo("DRAFT");
         assertThat(core.documents().get(0).chunks()).isNotEmpty();
         assertThat(core.documents().get(0).chunks().get(0).metadata())
                 .containsEntry("departmentCode", "RESP")
-                .containsEntry("chunker", "simple-text");
+                .containsEntry("chunker", "simple-text")
+                .containsEntry("parser", "text");
     }
 
     @Test
@@ -128,6 +130,48 @@ class KnowledgeIngestRequestMapperTest {
         assertThatThrownBy(() -> mapper.toCoreRequest(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate chunkIndex");
+    }
+
+    @Test
+    void shouldParseMarkdownDocumentIntoHeadingAwareChunks() {
+        KnowledgeIngestApiRequest request = new KnowledgeIngestApiRequest(
+                "default-guide-knowledge",
+                "guide-md",
+                "Guide Markdown",
+                null,
+                null,
+                220,
+                20,
+                List.of(new KnowledgeDocumentPayload(
+                        null,
+                        "guide-md",
+                        "Guide Markdown",
+                        "MARKDOWN",
+                        "Guide Markdown",
+                        "draft-1",
+                        """
+                        # Insurance Materials
+                        Bring ID card and insurance card.
+
+                        ## Children
+                        Bring guardian identity proof.
+                        """,
+                        Map.of("sourceId", "guide-md"),
+                        List.of(),
+                        "DRAFT"
+                )),
+                Map.of()
+        );
+
+        KnowledgeIngestRequest core = mapper.toCoreRequest(request);
+
+        assertThat(core.documents().get(0).status()).isEqualTo("DRAFT");
+        assertThat(core.documents().get(0).chunks()).hasSize(2);
+        assertThat(core.documents().get(0).chunks().get(0).title()).isEqualTo("Insurance Materials");
+        assertThat(core.documents().get(0).chunks().get(0).metadata())
+                .containsEntry("parser", "markdown")
+                .containsEntry("heading", "Insurance Materials")
+                .containsEntry("sourceId", "guide-md");
     }
 
     private static AiModelFallbackProperties modelProperties() {
