@@ -114,6 +114,10 @@ public class KnowledgeAdminService {
     }
 
     public List<KnowledgeRetrievalLogView> listRetrievalLogs(String namespace, Integer limit) {
+        return listRetrievalLogs(namespace, null, null, limit);
+    }
+
+    public List<KnowledgeRetrievalLogView> listRetrievalLogs(String namespace, String traceId, String chatId, Integer limit) {
         QueryParts query = new QueryParts("""
                 SELECT id, trace_id, chat_id, namespace, corpus_name, query_text, top_k,
                        min_score, status, hit_count, best_hit_id, best_score, latency_ms,
@@ -122,6 +126,8 @@ public class KnowledgeAdminService {
                 WHERE 1 = 1
                 """);
         query.addTextFilter("namespace", namespace);
+        query.addTextFilter("trace_id", traceId);
+        query.addTextFilter("chat_id", chatId);
         query.sql.append("ORDER BY created_at DESC LIMIT :limit");
         query.parameters.addValue("limit", safeLimit(limit));
         return jdbcOperations.query(query.sql.toString(), query.parameters, this::toRetrievalLogView);

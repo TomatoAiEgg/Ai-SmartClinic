@@ -81,8 +81,10 @@ public class KnowledgeAdminController {
     @GetMapping("/retrieval-logs")
     public Mono<List<KnowledgeRetrievalLogView>> listRetrievalLogs(
             @RequestParam(required = false) String namespace,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String chatId,
             @RequestParam(required = false) Integer limit) {
-        return Mono.fromCallable(() -> adminService.listRetrievalLogs(namespace, limit))
+        return Mono.fromCallable(() -> adminService.listRetrievalLogs(namespace, traceId, chatId, limit))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

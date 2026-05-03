@@ -51,6 +51,7 @@ public class GatewaySecurityConfig {
                 "/api/patients/**",
                 "/api/registrations",
                 "/api/registrations/**",
+                "/api/traces/**",
                 "/api/auth/logout",
                 "/api/auth/me"
         ));
@@ -68,6 +69,7 @@ public class GatewaySecurityConfig {
                                 "/api/patients/**",
                                 "/api/registrations",
                                 "/api/registrations/**",
+                                "/api/traces/**",
                                 "/api/auth/logout",
                                 "/api/auth/me"
                         ).authenticated()
