@@ -85,6 +85,14 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
                                         String traceId,
                                         SlotMutation mutation) {
         ScheduleSlotKey key = toRequiredSlotKey(request);
+        if (hasSuccessfulOperation(operationType, request)) {
+            log.info("[schedule-mcp] skip duplicate inventory mutation operation={} operation_id={} operation_source={} trace_id={}",
+                    operationType,
+                    request.operationId(),
+                    request.operationSource(),
+                    traceId);
+            return getRequiredSlot(request).toSummary();
+        }
         Integer remainingBefore = scheduleSlotRepository.findByKey(key)
                 .map(ScheduleSlotInventory::remainingSlots)
                 .orElse(null);
@@ -112,6 +120,13 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
             ));
             throw ex;
         }
+    }
+
+    private boolean hasSuccessfulOperation(String operationType, ScheduleSlotRequest request) {
+        if (isBlank(request.operationId()) || isBlank(request.operationSource())) {
+            return false;
+        }
+        return auditRepository.hasSuccessfulOperation(operationType, request.operationId(), request.operationSource());
     }
 
     private void appendAudit(ScheduleInventoryAuditRecord record) {
@@ -166,7 +181,7 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
     }
 
     private String normalizeRequired(String field, String value) {
-        if (value == null || value.trim().isEmpty()) {
+        if (isBlank(value)) {
             throw new ScheduleOperationException(
                     ApiErrorCode.INVALID_REQUEST,
                     "Missing required field: " + field,
@@ -174,6 +189,10 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
             );
         }
         return value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     @FunctionalInterface

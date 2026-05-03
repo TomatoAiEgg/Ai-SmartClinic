@@ -279,6 +279,12 @@ CREATE INDEX IF NOT EXISTS idx_slot_inventory_audit_slot
 CREATE INDEX IF NOT EXISTS idx_slot_inventory_audit_operation_success
     ON clinic_slot_inventory_audit_log (operation_type, success, audit_id DESC);
 
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_slot_inventory_audit_success_operation
+    ON clinic_slot_inventory_audit_log (operation_id, operation_type, operation_source)
+    WHERE operation_id IS NOT NULL
+      AND operation_source IS NOT NULL
+      AND success = true;
+
 COMMENT ON TABLE clinic_slot_inventory_audit_log IS '号源库存变更审计日志，记录 reserve/release 的请求链路、结果和剩余号源变化。';
 COMMENT ON COLUMN clinic_slot_inventory_audit_log.audit_id IS '号源库存审计自增主键。';
 COMMENT ON COLUMN clinic_slot_inventory_audit_log.operation_type IS '库存操作类型：RESERVE 预占号源，RELEASE 释放号源。';

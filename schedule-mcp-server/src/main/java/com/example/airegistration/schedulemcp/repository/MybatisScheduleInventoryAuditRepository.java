@@ -21,6 +21,15 @@ public class MybatisScheduleInventoryAuditRepository implements ScheduleInventor
         mapper.insertAudit(toEntity(record));
     }
 
+    @Override
+    public boolean hasSuccessfulOperation(String operationType, String operationId, String operationSource) {
+        if (operationId == null || operationId.isBlank()
+                || operationSource == null || operationSource.isBlank()) {
+            return false;
+        }
+        return mapper.countSuccessfulOperation(operationType, operationId, operationSource) > 0;
+    }
+
     private ClinicSlotInventoryAuditLogEntity toEntity(ScheduleInventoryAuditRecord record) {
         ClinicSlotInventoryAuditLogEntity entity = new ClinicSlotInventoryAuditLogEntity();
         entity.setOperationType(record.operationType());

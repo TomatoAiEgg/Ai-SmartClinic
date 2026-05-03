@@ -5,4 +5,8 @@ import com.example.airegistration.schedulemcp.entity.ScheduleInventoryAuditRecor
 public interface ScheduleInventoryAuditRepository {
 
     void append(ScheduleInventoryAuditRecord record);
+
+    default boolean hasSuccessfulOperation(String operationType, String operationId, String operationSource) {
+        return false;
+    }
 }

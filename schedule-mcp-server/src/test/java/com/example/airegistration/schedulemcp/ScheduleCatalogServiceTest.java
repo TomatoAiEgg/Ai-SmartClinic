@@ -100,6 +100,29 @@ class ScheduleCatalogServiceTest {
     }
 
     @Test
+    void shouldSkipDuplicateReserveForSameOperation() {
+        RecordingAuditRepository auditRepository = new RecordingAuditRepository();
+        ScheduleCatalogApplicationService auditedService =
+                new ScheduleCatalogApplicationService(new FakeScheduleSlotRepository(), auditRepository);
+        SlotSummary recommended = auditedService.recommend("RESP");
+        ScheduleSlotRequest request = new ScheduleSlotRequest(
+                recommended.departmentCode(),
+                recommended.doctorId(),
+                recommended.clinicDate(),
+                recommended.startTime()
+        ).withOperation("CONF-DUP-001", "REGISTRATION_CREATE");
+
+        SlotSummary first = auditedService.reserve(request, "trace-1");
+        SlotSummary second = auditedService.reserve(request, "trace-2");
+
+        assertThat(first.remainingSlots()).isEqualTo(recommended.remainingSlots() - 1);
+        assertThat(second.remainingSlots()).isEqualTo(first.remainingSlots());
+        assertThat(auditRepository.records)
+                .extracting(ScheduleInventoryAuditRecord::operationId)
+                .containsExactly("CONF-DUP-001");
+    }
+
+    @Test
     void shouldRejectUnknownSlot() {
         assertThatThrownBy(() -> service.resolve(new ScheduleSlotRequest(
                 "RESP",
@@ -227,6 +250,15 @@ class ScheduleCatalogServiceTest {
         @Override
         public void append(ScheduleInventoryAuditRecord record) {
             records.add(record);
+        }
+
+        @Override
+        public boolean hasSuccessfulOperation(String operationType, String operationId, String operationSource) {
+            return records.stream()
+                    .anyMatch(record -> record.success()
+                            && record.operationType().equals(operationType)
+                            && operationId.equals(record.operationId())
+                            && operationSource.equals(record.operationSource()));
         }
     }
 }
