@@ -270,7 +270,7 @@ CREATE TABLE IF NOT EXISTS registration_order (
     cancelled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_registration_order_status CHECK (status IN ('BOOKED', 'CANCELLED', 'RESCHEDULED'))
+    CONSTRAINT chk_registration_order_status CHECK (status IN ('BOOKED', 'CANCELLED', 'RESCHEDULED', 'EXPIRED'))
 );
 
 ALTER TABLE registration_order
@@ -307,7 +307,7 @@ COMMENT ON COLUMN registration_order.department_code IS '挂号科室编码。';
 COMMENT ON COLUMN registration_order.doctor_id IS '挂号医生唯一标识。';
 COMMENT ON COLUMN registration_order.clinic_date IS '预约就诊日期。';
 COMMENT ON COLUMN registration_order.start_time IS '预约开始时间。';
-COMMENT ON COLUMN registration_order.status IS '挂号状态：BOOKED 已预约，CANCELLED 已取消，RESCHEDULED 已改约。';
+COMMENT ON COLUMN registration_order.status IS '挂号状态：BOOKED 已预约，CANCELLED 已取消，RESCHEDULED 已改约，EXPIRED 已过号。';
 COMMENT ON COLUMN registration_order.confirmation_required IS '是否仍需用户确认，正式落库订单通常为 false。';
 COMMENT ON COLUMN registration_order.source_channel IS '订单来源渠道，例如 AI_CHAT、MANUAL_ADMIN。';
 COMMENT ON COLUMN registration_order.chat_id IS '关联的对话会话 ID。';

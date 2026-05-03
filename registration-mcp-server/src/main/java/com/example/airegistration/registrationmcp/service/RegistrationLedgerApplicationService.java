@@ -12,6 +12,11 @@ import com.example.airegistration.registrationmcp.entity.RegistrationRecord;
 import com.example.airegistration.registrationmcp.exception.RegistrationOperationException;
 import com.example.airegistration.registrationmcp.repository.RegistrationAuditRepository;
 import com.example.airegistration.registrationmcp.repository.RegistrationLedgerRepository;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +37,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
     private static final String OPERATION_QUERY = "QUERY";
     private static final String OPERATION_CANCEL = "CANCEL";
     private static final String OPERATION_RESCHEDULE = "RESCHEDULE";
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     private final RegistrationLedgerRepository registrationLedgerRepository;
     private final RegistrationAuditRepository registrationAuditRepository;
@@ -68,13 +74,14 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             operatorUserId = userId;
             chatId = nullIfBlank(command.chatId());
             ensureConfirmed(command.confirmed(), "create");
+            ensureFutureSlot(clinicDate, startTime);
 
             if (externalRequestId != null) {
                 Optional<RegistrationRecord> existing = registrationLedgerRepository.findByExternalRequestId(externalRequestId);
                 if (existing.isPresent()) {
                     RegistrationRecord record = existing.get();
                     ensureSameCreateRequest(record, userId, patientId, departmentCode, doctorId, clinicDate, startTime);
-                    RegistrationResult result = record.toResult("Registration created successfully.");
+                    RegistrationResult result = toResult(record, "Registration created successfully.");
                     appendAudit(new RegistrationAuditRecord(
                             record.registrationId(),
                             OPERATION_CREATE,
@@ -113,7 +120,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     if (existing.isPresent()) {
                         RegistrationRecord existingRecord = existing.get();
                         ensureSameCreateRequest(existingRecord, userId, patientId, departmentCode, doctorId, clinicDate, startTime);
-                        RegistrationResult result = existingRecord.toResult("Registration created successfully.");
+                        RegistrationResult result = toResult(existingRecord, "Registration created successfully.");
                         appendAudit(new RegistrationAuditRecord(
                                 existingRecord.registrationId(),
                                 OPERATION_CREATE,
@@ -132,7 +139,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                 throw ex;
             }
 
-            RegistrationResult result = record.toResult("Registration created successfully.");
+            RegistrationResult result = toResult(record, "Registration created successfully.");
             appendAudit(new RegistrationAuditRecord(
                     registrationId,
                     OPERATION_CREATE,
@@ -169,7 +176,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             if (!isBlank(userId)) {
                 ensureOwner(record, userId);
             }
-            RegistrationResult result = record.toResult("Registration found.");
+            RegistrationResult result = toResult(record, "Registration found.");
             appendAudit(new RegistrationAuditRecord(
                     record.registrationId(),
                     OPERATION_QUERY,
@@ -215,11 +222,11 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     .filter(record -> isBlank(clinicDate) || record.clinicDate().equals(clinicDate))
                     .filter(record -> isBlank(finalDepartmentCode) || record.departmentCode().equals(finalDepartmentCode))
                     .filter(record -> isBlank(doctorId) || record.doctorId().equalsIgnoreCase(doctorId))
-                    .filter(record -> isBlank(finalStatus) || record.status().code().equalsIgnoreCase(finalStatus))
+                    .filter(record -> isBlank(finalStatus) || effectiveStatus(record).code().equalsIgnoreCase(finalStatus))
                     .sorted(Comparator.comparing(RegistrationRecord::clinicDate)
                             .thenComparing(RegistrationRecord::startTime)
                             .thenComparing(RegistrationRecord::registrationId))
-                    .map(record -> record.toResult("Registration found."))
+                    .map(record -> toResult(record, "Registration found."))
                     .toList();
             appendAudit(new RegistrationAuditRecord(
                     null,
@@ -256,12 +263,13 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             RegistrationRecord record = getRequiredRecord(registrationId);
             ensureOwner(record, userId);
             ensureCancelable(record);
+            ensureNotExpired(record, "cancel");
             Map<String, Object> beforeSnapshot = recordSnapshot(record);
             record.cancel();
             registrationLedgerRepository.save(record);
 
             String reason = isBlank(request.reason()) ? "not_provided" : request.reason().trim();
-            RegistrationResult result = record.toResult("Registration cancelled successfully, reason: " + reason);
+            RegistrationResult result = toResult(record, "Registration cancelled successfully, reason: " + reason);
             appendAudit(new RegistrationAuditRecord(
                     registrationId,
                     OPERATION_CANCEL,
@@ -295,15 +303,17 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             String startTime = normalizeRequired("startTime", request.startTime());
             operatorUserId = userId;
             ensureConfirmed(request.confirmed(), "reschedule");
+            ensureFutureSlot(clinicDate, startTime);
 
             RegistrationRecord record = getRequiredRecord(registrationId);
             ensureOwner(record, userId);
             ensureReschedulable(record, clinicDate, startTime);
+            ensureNotExpired(record, "reschedule");
             Map<String, Object> beforeSnapshot = recordSnapshot(record);
             record.reschedule(clinicDate, startTime);
             registrationLedgerRepository.save(record);
 
-            RegistrationResult result = record.toResult("Registration rescheduled successfully.");
+            RegistrationResult result = toResult(record, "Registration rescheduled successfully.");
             appendAudit(new RegistrationAuditRecord(
                     registrationId,
                     OPERATION_RESCHEDULE,
@@ -380,6 +390,61 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                             "clinicDate", clinicDate,
                             "startTime", startTime
                     )
+            );
+        }
+    }
+
+    private void ensureFutureSlot(String clinicDate, String startTime) {
+        LocalDateTime appointmentTime = parseAppointmentTime(clinicDate, startTime);
+        if (!appointmentTime.isAfter(LocalDateTime.now())) {
+            throw new RegistrationOperationException(
+                    ApiErrorCode.INVALID_REQUEST,
+                    "Appointment slot must be in the future.",
+                    Map.of("clinicDate", clinicDate, "startTime", startTime)
+            );
+        }
+    }
+
+    private void ensureNotExpired(RegistrationRecord record, String action) {
+        if (effectiveStatus(record) == RegistrationStatus.EXPIRED) {
+            throw new RegistrationOperationException(
+                    ApiErrorCode.INVALID_REQUEST,
+                    "Expired registration cannot be " + action + ".",
+                    Map.of("registrationId", record.registrationId(), "status", RegistrationStatus.EXPIRED.code())
+            );
+        }
+    }
+
+    private RegistrationResult toResult(RegistrationRecord record, String message) {
+        return new RegistrationResult(
+                record.registrationId(),
+                effectiveStatus(record).code(),
+                message,
+                record.patientId(),
+                record.departmentCode(),
+                record.doctorId(),
+                record.clinicDate(),
+                record.startTime()
+        );
+    }
+
+    private RegistrationStatus effectiveStatus(RegistrationRecord record) {
+        if (record.status() != RegistrationStatus.BOOKED && record.status() != RegistrationStatus.RESCHEDULED) {
+            return record.status();
+        }
+        return parseAppointmentTime(record.clinicDate(), record.startTime()).isBefore(LocalDateTime.now())
+                ? RegistrationStatus.EXPIRED
+                : record.status();
+    }
+
+    private LocalDateTime parseAppointmentTime(String clinicDate, String startTime) {
+        try {
+            return LocalDateTime.of(LocalDate.parse(clinicDate), LocalTime.parse(startTime, TIME_FORMATTER));
+        } catch (DateTimeParseException ex) {
+            throw new RegistrationOperationException(
+                    ApiErrorCode.INVALID_REQUEST,
+                    "Invalid clinic date or start time.",
+                    Map.of("clinicDate", clinicDate, "startTime", startTime)
             );
         }
     }

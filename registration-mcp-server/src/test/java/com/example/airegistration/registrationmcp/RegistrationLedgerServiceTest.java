@@ -35,7 +35,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -55,7 +55,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -72,7 +72,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -81,7 +81,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "DERM",
                 "doc-103",
-                "2026-04-09",
+                "2099-04-09",
                 "14:00",
                 true
         ));
@@ -90,14 +90,14 @@ class RegistrationLedgerServiceTest {
                 "patient-test-002",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
 
         assertThat(service.search(new RegistrationSearchRequest("user-test-001", null, null, null, null)))
                 .hasSize(2);
-        assertThat(service.search(new RegistrationSearchRequest("user-test-001", "2026-04-08", null, null, null)))
+        assertThat(service.search(new RegistrationSearchRequest("user-test-001", "2099-04-08", null, null, null)))
                 .extracting(RegistrationResult::registrationId)
                 .containsExactly(first.registrationId());
         assertThat(service.search(new RegistrationSearchRequest("user-test-001", null, "resp", null, "booked")))
@@ -112,13 +112,28 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 false
         )))
                 .isInstanceOf(RegistrationOperationException.class)
                 .satisfies(ex -> assertThat(((RegistrationOperationException) ex).getErrorCode())
                         .isEqualTo(ApiErrorCode.REQUIRES_CONFIRMATION));
+    }
+
+    @Test
+    void shouldRejectCreateForPastSlot() {
+        assertThatThrownBy(() -> service.create(new RegistrationCommand(
+                "user-test-001",
+                "patient-test-001",
+                "RESP",
+                "doc-101",
+                "2000-04-08",
+                "09:00",
+                true
+        )))
+                .isInstanceOfSatisfying(RegistrationOperationException.class, ex ->
+                        assertThat(ex.getErrorCode()).isEqualTo(ApiErrorCode.INVALID_REQUEST));
     }
 
     @Test
@@ -137,7 +152,7 @@ class RegistrationLedgerServiceTest {
                 " ",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         )))
@@ -154,7 +169,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true,
                 "CONF-001",
@@ -182,7 +197,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true,
                 "CONF-AUDIT",
@@ -194,7 +209,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-09",
+                "2099-04-09",
                 "09:00",
                 true,
                 "CONF-AUDIT",
@@ -216,7 +231,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -248,7 +263,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -256,13 +271,13 @@ class RegistrationLedgerServiceTest {
         RegistrationResult rescheduled = service.reschedule(new RegistrationRescheduleRequest(
                 created.registrationId(),
                 "user-test-001",
-                "2026-04-10",
+                "2099-04-10",
                 "14:30",
                 true
         ));
 
         assertThat(rescheduled.status()).isEqualTo(RegistrationStatus.RESCHEDULED.code());
-        assertThat(rescheduled.clinicDate()).isEqualTo("2026-04-10");
+        assertThat(rescheduled.clinicDate()).isEqualTo("2099-04-10");
         assertThat(rescheduled.startTime()).isEqualTo("14:30");
     }
 
@@ -282,7 +297,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -305,7 +320,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -335,7 +350,7 @@ class RegistrationLedgerServiceTest {
                 "patient-test-001",
                 "RESP",
                 "doc-101",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         ));
@@ -343,13 +358,71 @@ class RegistrationLedgerServiceTest {
         assertThatThrownBy(() -> service.reschedule(new RegistrationRescheduleRequest(
                 created.registrationId(),
                 "user-test-001",
-                "2026-04-08",
+                "2099-04-08",
                 "09:00",
                 true
         )))
                 .isInstanceOf(RegistrationOperationException.class)
                 .satisfies(ex -> assertThat(((RegistrationOperationException) ex).getErrorCode())
                         .isEqualTo(ApiErrorCode.INVALID_REQUEST));
+    }
+
+    @Test
+    void shouldReturnExpiredStatusForPastBookedRegistration() {
+        FakeRegistrationLedgerRepository repository = new FakeRegistrationLedgerRepository();
+        RegistrationLedgerApplicationService localService = new RegistrationLedgerApplicationService(repository);
+        repository.save(new RegistrationRecord(
+                "REG-EXPIRED",
+                "user-test-001",
+                "patient-test-001",
+                "RESP",
+                "doc-101",
+                "2000-04-08",
+                "09:00",
+                RegistrationStatus.BOOKED
+        ));
+
+        RegistrationResult result = localService.query("REG-EXPIRED", "user-test-001");
+
+        assertThat(result.status()).isEqualTo(RegistrationStatus.EXPIRED.code());
+        assertThat(localService.search(new RegistrationSearchRequest("user-test-001", null, null, null, "EXPIRED")))
+                .extracting(RegistrationResult::registrationId)
+                .containsExactly("REG-EXPIRED");
+    }
+
+    @Test
+    void shouldRejectCancelAndRescheduleForExpiredRegistration() {
+        FakeRegistrationLedgerRepository repository = new FakeRegistrationLedgerRepository();
+        RegistrationLedgerApplicationService localService = new RegistrationLedgerApplicationService(repository);
+        repository.save(new RegistrationRecord(
+                "REG-EXPIRED",
+                "user-test-001",
+                "patient-test-001",
+                "RESP",
+                "doc-101",
+                "2000-04-08",
+                "09:00",
+                RegistrationStatus.BOOKED
+        ));
+
+        assertThatThrownBy(() -> localService.cancel(new RegistrationCancelRequest(
+                "REG-EXPIRED",
+                "user-test-001",
+                true,
+                "user_requested"
+        )))
+                .isInstanceOfSatisfying(RegistrationOperationException.class, ex ->
+                        assertThat(ex.getErrorCode()).isEqualTo(ApiErrorCode.INVALID_REQUEST));
+
+        assertThatThrownBy(() -> localService.reschedule(new RegistrationRescheduleRequest(
+                "REG-EXPIRED",
+                "user-test-001",
+                "2099-04-08",
+                "09:00",
+                true
+        )))
+                .isInstanceOfSatisfying(RegistrationOperationException.class, ex ->
+                        assertThat(ex.getErrorCode()).isEqualTo(ApiErrorCode.INVALID_REQUEST));
     }
 
     private static class RecordingAuditRepository implements RegistrationAuditRepository {

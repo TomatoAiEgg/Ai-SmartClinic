@@ -4,7 +4,8 @@ public enum RegistrationStatus {
 
     BOOKED("BOOKED", "已预约"),
     CANCELLED("CANCELLED", "已取消"),
-    RESCHEDULED("RESCHEDULED", "已改约");
+    RESCHEDULED("RESCHEDULED", "已改约"),
+    EXPIRED("EXPIRED", "已过号");
 
     private final String code;
     private final String description;
