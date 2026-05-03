@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.time.OffsetDateTime;
 
 @TableName("registration_audit_log")
 public class RegistrationAuditLogEntity {
@@ -46,6 +47,9 @@ public class RegistrationAuditLogEntity {
 
     @TableField("after_snapshot")
     private String afterSnapshot;
+
+    @TableField("created_at")
+    private OffsetDateTime createdAt;
 
     public Long getAuditId() {
         return auditId;
@@ -149,5 +153,13 @@ public class RegistrationAuditLogEntity {
 
     public void setAfterSnapshot(String afterSnapshot) {
         this.afterSnapshot = afterSnapshot;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(OffsetDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

@@ -7,10 +7,13 @@ import com.example.airegistration.dto.RegistrationRescheduleRequest;
 import com.example.airegistration.dto.RegistrationResult;
 import com.example.airegistration.dto.RegistrationSearchRequest;
 import com.example.airegistration.dto.RegistrationSearchResponse;
-import com.example.airegistration.support.TraceIdSupport;
+import com.example.airegistration.registrationmcp.dto.RegistrationAuditLogView;
+import com.example.airegistration.registrationmcp.service.RegistrationAuditQueryService;
 import com.example.airegistration.registrationmcp.service.RegistrationLedgerUseCase;
+import com.example.airegistration.support.TraceIdSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -29,9 +33,12 @@ public class RegistrationMcpController {
     private static final Logger log = LoggerFactory.getLogger(RegistrationMcpController.class);
 
     private final RegistrationLedgerUseCase registrationLedgerUseCase;
+    private final RegistrationAuditQueryService auditQueryService;
 
-    public RegistrationMcpController(RegistrationLedgerUseCase registrationLedgerUseCase) {
+    public RegistrationMcpController(RegistrationLedgerUseCase registrationLedgerUseCase,
+                                     RegistrationAuditQueryService auditQueryService) {
         this.registrationLedgerUseCase = registrationLedgerUseCase;
+        this.auditQueryService = auditQueryService;
     }
 
     @PostMapping
@@ -107,5 +114,26 @@ public class RegistrationMcpController {
                 request.startTime(),
                 request.confirmed());
         return registrationLedgerUseCase.reschedule(request);
+    }
+
+    @GetMapping("/audits")
+    @Operation(summary = "查询挂号审计", description = "按 registrationId、operatorUserId、chatId、traceId 和操作结果查询挂号审计记录。")
+    public List<RegistrationAuditLogView> audits(
+            @RequestParam(required = false) String registrationId,
+            @RequestParam(required = false) String operatorUserId,
+            @RequestParam(required = false) String chatId,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String operationType,
+            @RequestParam(required = false) Boolean success,
+            @RequestParam(required = false) Integer limit) {
+        return auditQueryService.listAuditLogs(
+                registrationId,
+                operatorUserId,
+                chatId,
+                traceId,
+                operationType,
+                success,
+                limit
+        );
     }
 }

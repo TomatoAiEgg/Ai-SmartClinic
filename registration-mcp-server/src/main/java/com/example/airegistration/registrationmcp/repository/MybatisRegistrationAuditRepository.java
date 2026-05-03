@@ -5,6 +5,7 @@ import com.example.airegistration.registrationmcp.entity.RegistrationAuditRecord
 import com.example.airegistration.registrationmcp.mapper.RegistrationAuditLogMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -28,6 +29,25 @@ public class MybatisRegistrationAuditRepository implements RegistrationAuditRepo
         } catch (JsonProcessingException | RuntimeException ex) {
             throw new IllegalStateException("Failed to append registration audit log.", ex);
         }
+    }
+
+    @Override
+    public List<RegistrationAuditLogEntity> listAuditLogs(String registrationId,
+                                                          String operatorUserId,
+                                                          String chatId,
+                                                          String traceId,
+                                                          String operationType,
+                                                          Boolean success,
+                                                          int limit) {
+        return registrationAuditLogMapper.selectAuditLogs(
+                registrationId,
+                operatorUserId,
+                chatId,
+                traceId,
+                operationType,
+                success,
+                limit
+        );
     }
 
     private RegistrationAuditLogEntity toEntity(RegistrationAuditRecord record) throws JsonProcessingException {
