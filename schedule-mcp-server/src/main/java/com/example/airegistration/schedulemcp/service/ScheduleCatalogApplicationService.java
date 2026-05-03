@@ -3,23 +3,40 @@ package com.example.airegistration.schedulemcp.service;
 import com.example.airegistration.dto.ScheduleSlotRequest;
 import com.example.airegistration.dto.SlotSummary;
 import com.example.airegistration.enums.ApiErrorCode;
+import com.example.airegistration.schedulemcp.entity.ScheduleInventoryAuditRecord;
 import com.example.airegistration.schedulemcp.entity.ScheduleSlotInventory;
 import com.example.airegistration.schedulemcp.entity.ScheduleSlotKey;
 import com.example.airegistration.schedulemcp.exception.ScheduleOperationException;
+import com.example.airegistration.schedulemcp.repository.ScheduleInventoryAuditRepository;
 import com.example.airegistration.schedulemcp.repository.ScheduleSlotRepository;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(ScheduleCatalogApplicationService.class);
+
     private final ScheduleSlotRepository scheduleSlotRepository;
+    private final ScheduleInventoryAuditRepository auditRepository;
 
     public ScheduleCatalogApplicationService(ScheduleSlotRepository scheduleSlotRepository) {
+        this(scheduleSlotRepository, record -> {
+        });
+    }
+
+    @Autowired
+    public ScheduleCatalogApplicationService(ScheduleSlotRepository scheduleSlotRepository,
+                                             ScheduleInventoryAuditRepository auditRepository) {
         this.scheduleSlotRepository = scheduleSlotRepository;
+        this.auditRepository = auditRepository == null ? record -> {
+        } : auditRepository;
     }
 
     @Override
@@ -54,13 +71,58 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
     }
 
     @Override
-    public SlotSummary reserve(ScheduleSlotRequest request) {
-        return scheduleSlotRepository.reserve(toRequiredSlotKey(request));
+    public SlotSummary reserve(ScheduleSlotRequest request, String traceId) {
+        return mutateWithAudit("RESERVE", request, traceId, scheduleSlotRepository::reserve);
     }
 
     @Override
-    public SlotSummary release(ScheduleSlotRequest request) {
-        return scheduleSlotRepository.release(toRequiredSlotKey(request));
+    public SlotSummary release(ScheduleSlotRequest request, String traceId) {
+        return mutateWithAudit("RELEASE", request, traceId, scheduleSlotRepository::release);
+    }
+
+    private SlotSummary mutateWithAudit(String operationType,
+                                        ScheduleSlotRequest request,
+                                        String traceId,
+                                        SlotMutation mutation) {
+        ScheduleSlotKey key = toRequiredSlotKey(request);
+        Integer remainingBefore = scheduleSlotRepository.findByKey(key)
+                .map(ScheduleSlotInventory::remainingSlots)
+                .orElse(null);
+        try {
+            SlotSummary result = mutation.execute(key);
+            appendAudit(ScheduleInventoryAuditRecord.success(
+                    operationType,
+                    traceId,
+                    key,
+                    remainingBefore,
+                    result.remainingSlots()
+            ));
+            return result;
+        } catch (RuntimeException ex) {
+            appendAudit(ScheduleInventoryAuditRecord.failure(
+                    operationType,
+                    traceId,
+                    key,
+                    remainingBefore,
+                    ex.getMessage()
+            ));
+            throw ex;
+        }
+    }
+
+    private void appendAudit(ScheduleInventoryAuditRecord record) {
+        try {
+            auditRepository.append(record);
+        } catch (RuntimeException ex) {
+            log.warn("[schedule-mcp] inventory audit append failed operation={} trace_id={} department_code={} doctor_id={} clinic_date={} start_time={}",
+                    record.operationType(),
+                    record.traceId(),
+                    record.departmentCode(),
+                    record.doctorId(),
+                    record.clinicDate(),
+                    record.startTime(),
+                    ex);
+        }
     }
 
     private ScheduleSlotInventory getRequiredSlot(ScheduleSlotRequest request) {
@@ -108,5 +170,10 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
             );
         }
         return value.trim();
+    }
+
+    @FunctionalInterface
+    private interface SlotMutation {
+        SlotSummary execute(ScheduleSlotKey key);
     }
 }

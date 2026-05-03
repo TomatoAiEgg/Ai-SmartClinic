@@ -88,7 +88,7 @@ public class ScheduleMcpController {
                 request.doctorId(),
                 request.clinicDate(),
                 request.startTime());
-        return scheduleCatalogUseCase.reserve(request);
+        return scheduleCatalogUseCase.reserve(request, traceId);
     }
 
     @PostMapping("/release")
@@ -101,6 +101,6 @@ public class ScheduleMcpController {
                 request.doctorId(),
                 request.clinicDate(),
                 request.startTime());
-        return scheduleCatalogUseCase.release(request);
+        return scheduleCatalogUseCase.release(request, traceId);
     }
 }

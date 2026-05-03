@@ -12,7 +12,15 @@ public interface ScheduleCatalogUseCase {
 
     SlotSummary resolve(ScheduleSlotRequest request);
 
-    SlotSummary reserve(ScheduleSlotRequest request);
+    default SlotSummary reserve(ScheduleSlotRequest request) {
+        return reserve(request, null);
+    }
 
-    SlotSummary release(ScheduleSlotRequest request);
+    SlotSummary reserve(ScheduleSlotRequest request, String traceId);
+
+    default SlotSummary release(ScheduleSlotRequest request) {
+        return release(request, null);
+    }
+
+    SlotSummary release(ScheduleSlotRequest request, String traceId);
 }

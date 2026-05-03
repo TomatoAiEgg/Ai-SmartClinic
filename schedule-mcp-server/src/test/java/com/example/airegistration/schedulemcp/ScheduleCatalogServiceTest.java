@@ -3,12 +3,15 @@ package com.example.airegistration.schedulemcp;
 import com.example.airegistration.enums.ApiErrorCode;
 import com.example.airegistration.dto.ScheduleSlotRequest;
 import com.example.airegistration.dto.SlotSummary;
+import com.example.airegistration.schedulemcp.entity.ScheduleInventoryAuditRecord;
 import com.example.airegistration.schedulemcp.entity.ScheduleSlotInventory;
 import com.example.airegistration.schedulemcp.entity.ScheduleSlotKey;
 import com.example.airegistration.schedulemcp.exception.ScheduleOperationException;
+import com.example.airegistration.schedulemcp.repository.ScheduleInventoryAuditRepository;
 import com.example.airegistration.schedulemcp.repository.ScheduleSlotRepository;
 import com.example.airegistration.schedulemcp.service.ScheduleCatalogApplicationService;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,6 +41,60 @@ class ScheduleCatalogServiceTest {
 
         assertThat(reserved.remainingSlots()).isEqualTo(recommended.remainingSlots() - 1);
         assertThat(released.remainingSlots()).isEqualTo(recommended.remainingSlots());
+    }
+
+    @Test
+    void shouldWriteAuditForReserveAndRelease() {
+        RecordingAuditRepository auditRepository = new RecordingAuditRepository();
+        ScheduleCatalogApplicationService auditedService =
+                new ScheduleCatalogApplicationService(new FakeScheduleSlotRepository(), auditRepository);
+        SlotSummary recommended = auditedService.recommend("RESP");
+        ScheduleSlotRequest request = new ScheduleSlotRequest(
+                recommended.departmentCode(),
+                recommended.doctorId(),
+                recommended.clinicDate(),
+                recommended.startTime()
+        );
+
+        SlotSummary reserved = auditedService.reserve(request, "trace-reserve");
+        auditedService.release(request, "trace-release");
+
+        assertThat(auditRepository.records)
+                .extracting(ScheduleInventoryAuditRecord::operationType)
+                .containsExactly("RESERVE", "RELEASE");
+        assertThat(auditRepository.records.get(0).traceId()).isEqualTo("trace-reserve");
+        assertThat(auditRepository.records.get(0).success()).isTrue();
+        assertThat(auditRepository.records.get(0).remainingBefore()).isEqualTo(recommended.remainingSlots());
+        assertThat(auditRepository.records.get(0).remainingAfter()).isEqualTo(reserved.remainingSlots());
+        assertThat(auditRepository.records.get(1).traceId()).isEqualTo("trace-release");
+        assertThat(auditRepository.records.get(1).remainingBefore()).isEqualTo(reserved.remainingSlots());
+    }
+
+    @Test
+    void shouldWriteFailureAuditForReserve() {
+        RecordingAuditRepository auditRepository = new RecordingAuditRepository();
+        ScheduleCatalogApplicationService auditedService =
+                new ScheduleCatalogApplicationService(new FakeScheduleSlotRepository(), auditRepository);
+        SlotSummary recommended = auditedService.recommend("GYN");
+        ScheduleSlotRequest request = new ScheduleSlotRequest(
+                recommended.departmentCode(),
+                recommended.doctorId(),
+                recommended.clinicDate(),
+                recommended.startTime()
+        );
+        for (int index = 0; index < recommended.remainingSlots(); index++) {
+            auditedService.reserve(request, "trace-drain");
+        }
+
+        assertThatThrownBy(() -> auditedService.reserve(request, "trace-empty"))
+                .isInstanceOf(ScheduleOperationException.class);
+
+        ScheduleInventoryAuditRecord lastRecord = auditRepository.records.get(auditRepository.records.size() - 1);
+        assertThat(lastRecord.operationType()).isEqualTo("RESERVE");
+        assertThat(lastRecord.traceId()).isEqualTo("trace-empty");
+        assertThat(lastRecord.success()).isFalse();
+        assertThat(lastRecord.remainingBefore()).isZero();
+        assertThat(lastRecord.remainingAfter()).isNull();
     }
 
     @Test
@@ -158,6 +215,16 @@ class ScheduleCatalogServiceTest {
                     new ScheduleSlotInventory("PED", "Pediatrics", "doc-105", "Dr. Gomez", today.plusDays(2).toString(), "15:00", 5),
                     new ScheduleSlotInventory("GYN", "Gynecology", "doc-107", "Dr. Lopez", today.plusDays(2).toString(), "13:30", 4)
             );
+        }
+    }
+
+    private static class RecordingAuditRepository implements ScheduleInventoryAuditRepository {
+
+        private final List<ScheduleInventoryAuditRecord> records = new ArrayList<>();
+
+        @Override
+        public void append(ScheduleInventoryAuditRecord record) {
+            records.add(record);
         }
     }
 }
