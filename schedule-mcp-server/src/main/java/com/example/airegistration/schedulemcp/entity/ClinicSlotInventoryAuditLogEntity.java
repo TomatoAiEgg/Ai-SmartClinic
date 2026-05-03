@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.time.OffsetDateTime;
 
 @TableName("clinic_slot_inventory_audit_log")
 public class ClinicSlotInventoryAuditLogEntity {
@@ -49,6 +50,9 @@ public class ClinicSlotInventoryAuditLogEntity {
 
     @TableField("source_service")
     private String sourceService;
+
+    @TableField("created_at")
+    private OffsetDateTime createdAt;
 
     public Long getAuditId() {
         return auditId;
@@ -160,5 +164,13 @@ public class ClinicSlotInventoryAuditLogEntity {
 
     public void setSourceService(String sourceService) {
         this.sourceService = sourceService;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(OffsetDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

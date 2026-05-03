@@ -6,7 +6,9 @@ import com.example.airegistration.dto.ScheduleSearchResponse;
 import com.example.airegistration.dto.ScheduleSlotRequest;
 import com.example.airegistration.dto.SlotSummary;
 import com.example.airegistration.support.TraceIdSupport;
+import com.example.airegistration.schedulemcp.dto.ScheduleInventoryAuditLogView;
 import com.example.airegistration.schedulemcp.service.ScheduleCatalogUseCase;
+import com.example.airegistration.schedulemcp.service.ScheduleInventoryAuditQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -28,9 +30,12 @@ public class ScheduleMcpController {
     private static final Logger log = LoggerFactory.getLogger(ScheduleMcpController.class);
 
     private final ScheduleCatalogUseCase scheduleCatalogUseCase;
+    private final ScheduleInventoryAuditQueryService auditQueryService;
 
-    public ScheduleMcpController(ScheduleCatalogUseCase scheduleCatalogUseCase) {
+    public ScheduleMcpController(ScheduleCatalogUseCase scheduleCatalogUseCase,
+                                 ScheduleInventoryAuditQueryService auditQueryService) {
         this.scheduleCatalogUseCase = scheduleCatalogUseCase;
+        this.auditQueryService = auditQueryService;
     }
 
     @GetMapping("/recommend")
@@ -102,5 +107,28 @@ public class ScheduleMcpController {
                 request.clinicDate(),
                 request.startTime());
         return scheduleCatalogUseCase.release(request, traceId);
+    }
+
+    @GetMapping("/inventory-audits")
+    @Operation(summary = "查询号源库存审计", description = "按 operationId、traceId、号源键和操作结果查询 reserve/release 审计记录。")
+    public List<ScheduleInventoryAuditLogView> inventoryAudits(
+            @RequestParam(required = false) String operationId,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String departmentCode,
+            @RequestParam(required = false) String doctorId,
+            @RequestParam(required = false) String clinicDate,
+            @RequestParam(required = false) String operationType,
+            @RequestParam(required = false) Boolean success,
+            @RequestParam(required = false) Integer limit) {
+        return auditQueryService.listAuditLogs(
+                operationId,
+                traceId,
+                departmentCode,
+                doctorId,
+                clinicDate,
+                operationType,
+                success,
+                limit
+        );
     }
 }
