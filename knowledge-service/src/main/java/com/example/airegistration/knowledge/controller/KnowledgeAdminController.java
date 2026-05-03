@@ -3,6 +3,9 @@ package com.example.airegistration.knowledge.controller;
 import com.example.airegistration.knowledge.dto.KnowledgeChunkView;
 import com.example.airegistration.knowledge.dto.KnowledgeDocumentStatusUpdateRequest;
 import com.example.airegistration.knowledge.dto.KnowledgeDocumentView;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationCaseResultView;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationResultRequest;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationRunView;
 import com.example.airegistration.knowledge.dto.KnowledgeIngestJobView;
 import com.example.airegistration.knowledge.dto.KnowledgeRetrievalLogView;
 import com.example.airegistration.knowledge.dto.KnowledgeRetrievalStatsView;
@@ -93,6 +96,36 @@ public class KnowledgeAdminController {
             @RequestParam(required = false) String namespace,
             @RequestParam(required = false) Integer hours) {
         return Mono.fromCallable(() -> adminService.retrievalStats(namespace, hours))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/evaluations")
+    public Mono<KnowledgeEvaluationRunView> saveEvaluationResult(
+            @RequestBody KnowledgeEvaluationResultRequest request) {
+        return Mono.fromCallable(() -> adminService.saveEvaluationResult(request))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @GetMapping("/evaluations")
+    public Mono<List<KnowledgeEvaluationRunView>> listEvaluationRuns(
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) Integer limit) {
+        return Mono.fromCallable(() -> adminService.listEvaluationRuns(traceId, limit))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @GetMapping("/evaluations/{runId}")
+    public Mono<KnowledgeEvaluationRunView> getEvaluationRun(@PathVariable UUID runId) {
+        return Mono.fromCallable(() -> adminService.getEvaluationRun(runId))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @GetMapping("/evaluations/{runId}/results")
+    public Mono<List<KnowledgeEvaluationCaseResultView>> listEvaluationCaseResults(
+            @PathVariable UUID runId,
+            @RequestParam(required = false) Boolean passed,
+            @RequestParam(required = false) Integer limit) {
+        return Mono.fromCallable(() -> adminService.listEvaluationCaseResults(runId, passed, limit))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 }

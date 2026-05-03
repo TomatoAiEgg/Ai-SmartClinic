@@ -2,6 +2,12 @@ package com.example.airegistration.knowledge.service;
 
 import com.example.airegistration.knowledge.dto.KnowledgeChunkView;
 import com.example.airegistration.knowledge.dto.KnowledgeDocumentView;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationCaseResultRequest;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationCaseResultView;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationGroupSummary;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationResultRequest;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationRunView;
+import com.example.airegistration.knowledge.dto.KnowledgeEvaluationSummary;
 import com.example.airegistration.knowledge.dto.KnowledgeIngestJobView;
 import com.example.airegistration.knowledge.dto.KnowledgeRetrievalLogView;
 import com.example.airegistration.knowledge.dto.KnowledgeRetrievalStatsView;
@@ -156,6 +162,107 @@ public class KnowledgeAdminService {
     }
 
     @Transactional
+    public KnowledgeEvaluationRunView saveEvaluationResult(KnowledgeEvaluationResultRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("evaluation result request cannot be null");
+        }
+        KnowledgeEvaluationSummary summary = request.summary() == null
+                ? new KnowledgeEvaluationSummary(request.results().size(), 0, request.results().size(), 0D)
+                : request.summary();
+        UUID runId = UUID.randomUUID();
+        jdbcOperations.update("""
+                INSERT INTO knowledge_evaluation_run (
+                    id, trace_id, base_url, cases_path, total_count, passed_count,
+                    failed_count, pass_rate, by_group, metadata, generated_at
+                )
+                VALUES (
+                    :id, :traceId, :baseUrl, :casesPath, :totalCount, :passedCount,
+                    :failedCount, :passRate, CAST(:byGroup AS jsonb), CAST(:metadata AS jsonb), :generatedAt
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", runId)
+                .addValue("traceId", blankToNull(request.traceId()))
+                .addValue("baseUrl", blankToNull(request.baseUrl()))
+                .addValue("casesPath", blankToNull(request.casesPath()))
+                .addValue("totalCount", summary.total())
+                .addValue("passedCount", summary.passed())
+                .addValue("failedCount", summary.failed())
+                .addValue("passRate", summary.passRate())
+                .addValue("byGroup", toJson(request.byGroup()))
+                .addValue("metadata", toJson(request.metadata()))
+                .addValue("generatedAt", request.generatedAt()));
+        for (KnowledgeEvaluationCaseResultRequest result : request.results()) {
+            jdbcOperations.update("""
+                    INSERT INTO knowledge_evaluation_case_result (
+                        run_id, case_id, group_name, namespace, passed, status,
+                        expected_status, hit_count, matched_rank, best_score, message
+                    )
+                    VALUES (
+                        :runId, :caseId, :groupName, :namespace, :passed, :status,
+                        :expectedStatus, :hitCount, :matchedRank, :bestScore, :message
+                    )
+                    """, new MapSqlParameterSource()
+                    .addValue("runId", runId)
+                    .addValue("caseId", blankToNull(result.id()))
+                    .addValue("groupName", blankToNull(result.group()))
+                    .addValue("namespace", blankToNull(result.namespace()))
+                    .addValue("passed", result.passed())
+                    .addValue("status", blankToNull(result.status()))
+                    .addValue("expectedStatus", blankToNull(result.expectedStatus()))
+                    .addValue("hitCount", result.hitCount())
+                    .addValue("matchedRank", result.matchedRank())
+                    .addValue("bestScore", result.bestScore())
+                    .addValue("message", blankToNull(result.message())));
+        }
+        return getEvaluationRun(runId);
+    }
+
+    public List<KnowledgeEvaluationRunView> listEvaluationRuns(String traceId, Integer limit) {
+        QueryParts query = new QueryParts("""
+                SELECT id, trace_id, base_url, cases_path, total_count, passed_count,
+                       failed_count, pass_rate, CAST(by_group AS text) AS by_group_json,
+                       CAST(metadata AS text) AS metadata_json, generated_at, created_at
+                FROM knowledge_evaluation_run
+                WHERE 1 = 1
+                """);
+        query.addTextFilter("trace_id", traceId);
+        query.sql.append("ORDER BY created_at DESC LIMIT :limit");
+        query.parameters.addValue("limit", safeLimit(limit));
+        return jdbcOperations.query(query.sql.toString(), query.parameters, this::toEvaluationRunView);
+    }
+
+    public KnowledgeEvaluationRunView getEvaluationRun(UUID runId) {
+        try {
+            return jdbcOperations.queryForObject("""
+                    SELECT id, trace_id, base_url, cases_path, total_count, passed_count,
+                           failed_count, pass_rate, CAST(by_group AS text) AS by_group_json,
+                           CAST(metadata AS text) AS metadata_json, generated_at, created_at
+                    FROM knowledge_evaluation_run
+                    WHERE id = :id
+                    """, new MapSqlParameterSource("id", runId), this::toEvaluationRunView);
+        } catch (EmptyResultDataAccessException ex) {
+            throw new NoSuchElementException("knowledge evaluation run not found: " + runId);
+        }
+    }
+
+    public List<KnowledgeEvaluationCaseResultView> listEvaluationCaseResults(UUID runId, Boolean passed, Integer limit) {
+        QueryParts query = new QueryParts("""
+                SELECT id, run_id, case_id, group_name, namespace, passed, status,
+                       expected_status, hit_count, matched_rank, best_score, message, created_at
+                FROM knowledge_evaluation_case_result
+                WHERE run_id = :runId
+                """);
+        query.parameters.addValue("runId", runId);
+        if (passed != null) {
+            query.sql.append("AND passed = :passed ");
+            query.parameters.addValue("passed", passed);
+        }
+        query.sql.append("ORDER BY passed ASC, group_name ASC, case_id ASC LIMIT :limit");
+        query.parameters.addValue("limit", safeLimit(limit));
+        return jdbcOperations.query(query.sql.toString(), query.parameters, this::toEvaluationCaseResultView);
+    }
+
+    @Transactional
     public KnowledgeDocumentView updateDocumentStatus(UUID documentId, String status) {
         String normalizedStatus = requireDocumentStatus(status);
         boolean enabled = "ACTIVE".equals(normalizedStatus);
@@ -276,6 +383,41 @@ public class KnowledgeAdminService {
         );
     }
 
+    private KnowledgeEvaluationRunView toEvaluationRunView(ResultSet rs, int rowNum) throws SQLException {
+        return new KnowledgeEvaluationRunView(
+                uuid(rs, "id"),
+                rs.getString("trace_id"),
+                rs.getString("base_url"),
+                rs.getString("cases_path"),
+                rs.getInt("total_count"),
+                rs.getInt("passed_count"),
+                rs.getInt("failed_count"),
+                rs.getDouble("pass_rate"),
+                jsonGroupSummaries(rs.getString("by_group_json")),
+                jsonMap(rs.getString("metadata_json")),
+                instant(rs, "generated_at"),
+                instant(rs, "created_at")
+        );
+    }
+
+    private KnowledgeEvaluationCaseResultView toEvaluationCaseResultView(ResultSet rs, int rowNum) throws SQLException {
+        return new KnowledgeEvaluationCaseResultView(
+                uuid(rs, "id"),
+                uuid(rs, "run_id"),
+                rs.getString("case_id"),
+                rs.getString("group_name"),
+                rs.getString("namespace"),
+                rs.getBoolean("passed"),
+                rs.getString("status"),
+                rs.getString("expected_status"),
+                rs.getInt("hit_count"),
+                nullableInteger(rs, "matched_rank"),
+                nullableDouble(rs, "best_score"),
+                rs.getString("message"),
+                instant(rs, "created_at")
+        );
+    }
+
     private String normalizeOptionalStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
@@ -352,6 +494,18 @@ public class KnowledgeAdminService {
         }
     }
 
+    private List<KnowledgeEvaluationGroupSummary> jsonGroupSummaries(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
+    }
+
     private List<String> jsonStringList(String json) {
         if (json == null || json.isBlank()) {
             return List.of();
@@ -362,6 +516,18 @@ public class KnowledgeAdminService {
         } catch (JsonProcessingException ex) {
             return List.of();
         }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? Map.of() : value);
+        } catch (JsonProcessingException ex) {
+            return "{}";
+        }
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static final class QueryParts {

@@ -3,9 +3,11 @@ param(
     [string]$CasesPath = (Join-Path $PSScriptRoot "rag-evaluation-cases-2026-05-02.json"),
     [string]$AdminToken = $env:APP_AI_KNOWLEDGE_ADMIN_TOKEN,
     [string]$OutputPath = "",
+    [string]$ResultUploadUrl = "",
     [string[]]$Group = @(),
     [string[]]$CaseId = @(),
     [switch]$ListCases,
+    [switch]$UploadResult,
     [switch]$NoFailOnMismatch
 )
 
@@ -282,20 +284,46 @@ if ($failedResults.Count -gt 0) {
     $failedResults | Select-Object id, status, hitCount, matchedRank, bestScore, message | Format-Table -AutoSize
 }
 
+$resultPayload = [pscustomobject]@{
+    generatedAt = (Get-Date).ToString("o")
+    traceId = $traceId
+    baseUrl = $BaseUrl
+    casesPath = (Resolve-Path $CasesPath).Path
+    summary = $summary
+    byGroup = $byGroup
+    results = $resultArray
+    metadata = @{
+        runner = "database/eval/2026-05-02-run-rag-evaluation.ps1"
+        casesVersion = [string](Get-PropertyValue -Object $definition -Name "version" -Default "")
+        description = [string](Get-PropertyValue -Object $definition -Name "description" -Default "")
+    }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     $directory = Split-Path -Path $OutputPath -Parent
     if (-not [string]::IsNullOrWhiteSpace($directory)) {
         New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
-    [pscustomobject]@{
-        generatedAt = (Get-Date).ToString("o")
-        traceId = $traceId
-        baseUrl = $BaseUrl
-        casesPath = (Resolve-Path $CasesPath).Path
-        summary = $summary
-        byGroup = $byGroup
-        results = $resultArray
-    } | ConvertTo-Json -Depth 20 | Set-Content -Path $OutputPath -Encoding UTF8
+    $resultPayload | ConvertTo-Json -Depth 20 | Set-Content -Path $OutputPath -Encoding UTF8
+}
+
+if ($UploadResult) {
+    $uploadUrl = if ([string]::IsNullOrWhiteSpace($ResultUploadUrl)) {
+        "$BaseUrl/api/knowledge/evaluations"
+    } else {
+        $ResultUploadUrl
+    }
+    $headers = @{}
+    if (-not [string]::IsNullOrWhiteSpace($AdminToken)) {
+        $headers["X-Knowledge-Admin-Token"] = $AdminToken
+    }
+    $savedRun = Invoke-RestMethod `
+        -Method Post `
+        -Uri $uploadUrl `
+        -ContentType "application/json; charset=utf-8" `
+        -Headers $headers `
+        -Body ($resultPayload | ConvertTo-Json -Depth 20)
+    Write-Output ("uploadedEvaluationRunId={0}" -f $savedRun.id)
 }
 
 if ($summary.failed -gt 0 -and -not $NoFailOnMismatch) {
