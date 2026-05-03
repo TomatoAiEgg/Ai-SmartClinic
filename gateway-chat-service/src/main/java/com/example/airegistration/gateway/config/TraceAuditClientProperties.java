@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class TraceAuditClientProperties {
 
     private String registrationBaseUrl = "http://localhost:10103";
+    private String registrationAgentBaseUrl = "http://localhost:10082";
     private String scheduleBaseUrl = "http://localhost:10102";
     private String knowledgeBaseUrl = "http://localhost:10200";
 
@@ -15,6 +16,14 @@ public class TraceAuditClientProperties {
 
     public void setRegistrationBaseUrl(String registrationBaseUrl) {
         this.registrationBaseUrl = registrationBaseUrl;
+    }
+
+    public String getRegistrationAgentBaseUrl() {
+        return registrationAgentBaseUrl;
+    }
+
+    public void setRegistrationAgentBaseUrl(String registrationAgentBaseUrl) {
+        this.registrationAgentBaseUrl = registrationAgentBaseUrl;
     }
 
     public String getScheduleBaseUrl() {

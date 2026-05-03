@@ -4,6 +4,7 @@ import com.example.airegistration.gateway.config.TraceAuditClientProperties;
 import com.example.airegistration.gateway.dto.AuditSection;
 import com.example.airegistration.gateway.dto.KnowledgeRetrievalLogView;
 import com.example.airegistration.gateway.dto.RegistrationAuditLogView;
+import com.example.airegistration.gateway.dto.RegistrationWorkflowExecutionLogView;
 import com.example.airegistration.gateway.dto.ScheduleInventoryAuditLogView;
 import com.example.airegistration.gateway.dto.TraceAuditResponse;
 import com.example.airegistration.support.TraceIdSupport;
@@ -24,6 +25,9 @@ public class TraceAuditClient {
     private static final ParameterizedTypeReference<List<RegistrationAuditLogView>> REGISTRATION_AUDIT_LIST =
             new ParameterizedTypeReference<>() {
             };
+    private static final ParameterizedTypeReference<List<RegistrationWorkflowExecutionLogView>> REGISTRATION_WORKFLOW_LIST =
+            new ParameterizedTypeReference<>() {
+            };
     private static final ParameterizedTypeReference<List<ScheduleInventoryAuditLogView>> SCHEDULE_AUDIT_LIST =
             new ParameterizedTypeReference<>() {
             };
@@ -32,21 +36,37 @@ public class TraceAuditClient {
             };
 
     private final WebClient registrationClient;
+    private final WebClient registrationAgentClient;
     private final WebClient scheduleClient;
     private final WebClient knowledgeClient;
 
     public TraceAuditClient(WebClient.Builder webClientBuilder, TraceAuditClientProperties properties) {
         this.registrationClient = webClientBuilder.baseUrl(properties.getRegistrationBaseUrl()).build();
+        this.registrationAgentClient = webClientBuilder.baseUrl(properties.getRegistrationAgentBaseUrl()).build();
         this.scheduleClient = webClientBuilder.baseUrl(properties.getScheduleBaseUrl()).build();
         this.knowledgeClient = webClientBuilder.baseUrl(properties.getKnowledgeBaseUrl()).build();
     }
 
     public Mono<TraceAuditResponse> queryTrace(String traceId, int limit) {
+        Mono<AuditSection<RegistrationWorkflowExecutionLogView>> workflowExecutions = fetchRegistrationWorkflowExecutions(traceId, limit);
         Mono<AuditSection<RegistrationAuditLogView>> registrationAudits = fetchRegistrationAudits(traceId, limit);
         Mono<AuditSection<ScheduleInventoryAuditLogView>> scheduleAudits = fetchScheduleAudits(traceId, limit);
         Mono<AuditSection<KnowledgeRetrievalLogView>> knowledgeLogs = fetchKnowledgeLogs(traceId, limit);
-        return Mono.zip(registrationAudits, scheduleAudits, knowledgeLogs)
-                .map(tuple -> new TraceAuditResponse(traceId, tuple.getT1(), tuple.getT2(), tuple.getT3()));
+        return Mono.zip(workflowExecutions, registrationAudits, scheduleAudits, knowledgeLogs)
+                .map(tuple -> new TraceAuditResponse(traceId, tuple.getT1(), tuple.getT2(), tuple.getT3(), tuple.getT4()));
+    }
+
+    private Mono<AuditSection<RegistrationWorkflowExecutionLogView>> fetchRegistrationWorkflowExecutions(String traceId, int limit) {
+        return registrationAgentClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/registration/workflow-executions")
+                        .queryParam("traceId", traceId)
+                        .queryParam("limit", limit)
+                        .build())
+                .header(TraceIdSupport.TRACE_HEADER, traceId)
+                .retrieve()
+                .bodyToMono(REGISTRATION_WORKFLOW_LIST)
+                .map(records -> AuditSection.success("registration-agent", records))
+                .onErrorResume(ex -> fallback("registration-agent", traceId, ex));
     }
 
     private Mono<AuditSection<RegistrationAuditLogView>> fetchRegistrationAudits(String traceId, int limit) {

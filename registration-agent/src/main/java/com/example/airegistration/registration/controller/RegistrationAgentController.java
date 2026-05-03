@@ -8,13 +8,16 @@ import com.example.airegistration.agent.AgentResponseEnvelope;
 import com.example.airegistration.dto.ChatRequest;
 import com.example.airegistration.dto.ChatResponse;
 import com.example.airegistration.enums.AgentRoute;
+import com.example.airegistration.registration.dto.RegistrationWorkflowExecutionLogView;
 import com.example.airegistration.support.TraceIdSupport;
 import com.example.airegistration.registration.service.RegistrationAgentUseCase;
+import com.example.airegistration.registration.service.workflow.RegistrationWorkflowExecutionLogQueryService;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,9 +32,12 @@ public class RegistrationAgentController {
     private static final Logger log = LoggerFactory.getLogger(RegistrationAgentController.class);
 
     private final RegistrationAgentUseCase registrationAgentUseCase;
+    private final RegistrationWorkflowExecutionLogQueryService executionLogQueryService;
 
-    public RegistrationAgentController(RegistrationAgentUseCase registrationAgentUseCase) {
+    public RegistrationAgentController(RegistrationAgentUseCase registrationAgentUseCase,
+                                       RegistrationWorkflowExecutionLogQueryService executionLogQueryService) {
         this.registrationAgentUseCase = registrationAgentUseCase;
+        this.executionLogQueryService = executionLogQueryService;
     }
 
     @GetMapping("/agent/capabilities")
@@ -49,6 +55,26 @@ public class RegistrationAgentController {
                         "legacyEndpoint", "/api/registration",
                         "policyNamespace", "default-registration-policy"
                 )
+        );
+    }
+
+    @GetMapping("/registration/workflow-executions")
+    public List<RegistrationWorkflowExecutionLogView> workflowExecutions(
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String chatId,
+            @RequestParam(required = false) String executionId,
+            @RequestParam(required = false) String confirmationId,
+            @RequestParam(required = false) String intent,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer limit) {
+        return executionLogQueryService.listLogs(
+                traceId,
+                chatId,
+                executionId,
+                confirmationId,
+                intent,
+                status,
+                limit
         );
     }
 
