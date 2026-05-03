@@ -29,6 +29,8 @@ public class MybatisScheduleInventoryAuditRepository implements ScheduleInventor
         entity.setDoctorId(record.doctorId());
         entity.setClinicDate(record.clinicDate());
         entity.setStartTime(record.startTime());
+        entity.setOperationId(record.operationId());
+        entity.setOperationSource(record.operationSource());
         entity.setSuccess(record.success());
         entity.setReason(record.reason());
         entity.setRemainingBefore(record.remainingBefore());

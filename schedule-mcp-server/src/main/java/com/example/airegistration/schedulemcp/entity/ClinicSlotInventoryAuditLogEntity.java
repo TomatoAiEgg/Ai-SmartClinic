@@ -29,6 +29,12 @@ public class ClinicSlotInventoryAuditLogEntity {
     @TableField("start_time")
     private String startTime;
 
+    @TableField("operation_id")
+    private String operationId;
+
+    @TableField("operation_source")
+    private String operationSource;
+
     @TableField("success")
     private Boolean success;
 
@@ -98,6 +104,22 @@ public class ClinicSlotInventoryAuditLogEntity {
 
     public void setStartTime(String startTime) {
         this.startTime = startTime;
+    }
+
+    public String getOperationId() {
+        return operationId;
+    }
+
+    public void setOperationId(String operationId) {
+        this.operationId = operationId;
+    }
+
+    public String getOperationSource() {
+        return operationSource;
+    }
+
+    public void setOperationSource(String operationSource) {
+        this.operationSource = operationSource;
     }
 
     public Boolean getSuccess() {

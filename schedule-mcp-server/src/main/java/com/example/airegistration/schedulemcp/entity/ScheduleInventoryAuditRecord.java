@@ -7,6 +7,8 @@ public record ScheduleInventoryAuditRecord(
         String doctorId,
         String clinicDate,
         String startTime,
+        String operationId,
+        String operationSource,
         boolean success,
         String reason,
         Integer remainingBefore,
@@ -15,6 +17,8 @@ public record ScheduleInventoryAuditRecord(
 
     public static ScheduleInventoryAuditRecord success(String operationType,
                                                        String traceId,
+                                                       String operationId,
+                                                       String operationSource,
                                                        ScheduleSlotKey key,
                                                        Integer remainingBefore,
                                                        Integer remainingAfter) {
@@ -25,6 +29,8 @@ public record ScheduleInventoryAuditRecord(
                 key.doctorId(),
                 key.clinicDate(),
                 key.startTime(),
+                normalize(operationId),
+                normalize(operationSource),
                 true,
                 "ok",
                 remainingBefore,
@@ -34,6 +40,8 @@ public record ScheduleInventoryAuditRecord(
 
     public static ScheduleInventoryAuditRecord failure(String operationType,
                                                        String traceId,
+                                                       String operationId,
+                                                       String operationSource,
                                                        ScheduleSlotKey key,
                                                        Integer remainingBefore,
                                                        String reason) {
@@ -44,6 +52,8 @@ public record ScheduleInventoryAuditRecord(
                 key.doctorId(),
                 key.clinicDate(),
                 key.startTime(),
+                normalize(operationId),
+                normalize(operationSource),
                 false,
                 normalize(reason),
                 remainingBefore,

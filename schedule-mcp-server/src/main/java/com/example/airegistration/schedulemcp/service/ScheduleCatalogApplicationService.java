@@ -93,6 +93,8 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
             appendAudit(ScheduleInventoryAuditRecord.success(
                     operationType,
                     traceId,
+                    request.operationId(),
+                    request.operationSource(),
                     key,
                     remainingBefore,
                     result.remainingSlots()
@@ -102,6 +104,8 @@ public class ScheduleCatalogApplicationService implements ScheduleCatalogUseCase
             appendAudit(ScheduleInventoryAuditRecord.failure(
                     operationType,
                     traceId,
+                    request.operationId(),
+                    request.operationSource(),
                     key,
                     remainingBefore,
                     ex.getMessage()

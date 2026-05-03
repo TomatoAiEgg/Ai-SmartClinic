@@ -34,7 +34,7 @@ class ScheduleCatalogServiceTest {
                 recommended.doctorId(),
                 recommended.clinicDate(),
                 recommended.startTime()
-        );
+        ).withOperation("CONF-AUDIT-001", "REGISTRATION_CREATE");
 
         SlotSummary reserved = service.reserve(request);
         SlotSummary released = service.release(request);
@@ -54,7 +54,7 @@ class ScheduleCatalogServiceTest {
                 recommended.doctorId(),
                 recommended.clinicDate(),
                 recommended.startTime()
-        );
+        ).withOperation("CONF-AUDIT-001", "REGISTRATION_CREATE");
 
         SlotSummary reserved = auditedService.reserve(request, "trace-reserve");
         auditedService.release(request, "trace-release");
@@ -63,6 +63,8 @@ class ScheduleCatalogServiceTest {
                 .extracting(ScheduleInventoryAuditRecord::operationType)
                 .containsExactly("RESERVE", "RELEASE");
         assertThat(auditRepository.records.get(0).traceId()).isEqualTo("trace-reserve");
+        assertThat(auditRepository.records.get(0).operationId()).isEqualTo("CONF-AUDIT-001");
+        assertThat(auditRepository.records.get(0).operationSource()).isEqualTo("REGISTRATION_CREATE");
         assertThat(auditRepository.records.get(0).success()).isTrue();
         assertThat(auditRepository.records.get(0).remainingBefore()).isEqualTo(recommended.remainingSlots());
         assertThat(auditRepository.records.get(0).remainingAfter()).isEqualTo(reserved.remainingSlots());

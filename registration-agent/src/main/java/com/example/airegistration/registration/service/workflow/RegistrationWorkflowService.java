@@ -155,7 +155,8 @@ public class RegistrationWorkflowService {
                     RegistrationWorkflowCheckpoint resumedCheckpoint =
                             workflowRuntime.resume(request, context.checkpoint(), "execute_write");
                     Map<String, Object> data = resumeData(context);
-                    ScheduleSlotRequest slotRequest = toSlotRequest(data);
+                    ScheduleSlotRequest slotRequest = toSlotRequest(data)
+                            .withOperation(context.confirmationId(), "REGISTRATION_CREATE");
                     RegistrationCommand command = new RegistrationCommand(
                             request.userId(),
                             requireString(data, "patientId"),
@@ -338,8 +339,10 @@ public class RegistrationWorkflowService {
                                         request.metadata().getOrDefault("reason", "user_requested")
                                 );
 
+                                ScheduleSlotRequest releaseSlotRequest = toSlotRequest(existing)
+                                        .withOperation(context.confirmationId(), "REGISTRATION_CANCEL");
                                 return registrationToolService.cancelRegistration(request.traceId(), cancelRequest)
-                                        .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), toSlotRequest(existing))
+                                        .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), releaseSlotRequest)
                                                 .flatMap(ignored -> {
                                                     RegistrationWorkflowCheckpoint completedCheckpoint = resumedCheckpoint.advance(
                                                             "execute_write",
@@ -468,9 +471,14 @@ public class RegistrationWorkflowService {
                                         true
                                 );
 
-                                return registrationToolService.reserveSlot(request.traceId(), targetSlotRequest)
+                                String operationId = inventoryOperationId(request);
+                                ScheduleSlotRequest correlatedTargetSlotRequest = targetSlotRequest
+                                        .withOperation(operationId, "REGISTRATION_RESCHEDULE_TARGET");
+                                ScheduleSlotRequest correlatedOriginalSlotRequest = toSlotRequest(existing)
+                                        .withOperation(operationId, "REGISTRATION_RESCHEDULE_ORIGINAL");
+                                return registrationToolService.reserveSlot(request.traceId(), correlatedTargetSlotRequest)
                                         .flatMap(ignored -> registrationToolService.rescheduleRegistration(request.traceId(), rescheduleRequest)
-                                                .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), toSlotRequest(existing))
+                                                .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), correlatedOriginalSlotRequest)
                                                         .flatMap(released -> toResultResponse(request, result, RegistrationReplyScene.RESCHEDULE_RESULT))
                                                         .onErrorResume(ex -> withWarning(
                                                                 request,
@@ -478,7 +486,7 @@ public class RegistrationWorkflowService {
                                                                 ex,
                                                                 RegistrationReplyScene.OLD_SLOT_RELEASE_FAILED
                                                         )))
-                                                .onErrorResume(ex -> registrationToolService.rollbackReservedSlot(request.traceId(), targetSlotRequest, ex)));
+                                                .onErrorResume(ex -> registrationToolService.rollbackReservedSlot(request.traceId(), correlatedTargetSlotRequest, ex)));
                             });
                 })
                 .onErrorResume(ex -> toErrorResponse(request, ex, "reschedule"));
@@ -549,9 +557,13 @@ public class RegistrationWorkflowService {
                                         true
                                 );
 
-                                return registrationToolService.reserveSlot(request.traceId(), targetSlotRequest)
+                                ScheduleSlotRequest correlatedTargetSlotRequest = targetSlotRequest
+                                        .withOperation(context.confirmationId(), "REGISTRATION_RESCHEDULE_TARGET");
+                                ScheduleSlotRequest correlatedOriginalSlotRequest = toSlotRequest(existing)
+                                        .withOperation(context.confirmationId(), "REGISTRATION_RESCHEDULE_ORIGINAL");
+                                return registrationToolService.reserveSlot(request.traceId(), correlatedTargetSlotRequest)
                                         .flatMap(ignored -> registrationToolService.rescheduleRegistration(request.traceId(), rescheduleRequest)
-                                                .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), toSlotRequest(existing))
+                                                .flatMap(result -> registrationToolService.releaseSlot(request.traceId(), correlatedOriginalSlotRequest)
                                                         .flatMap(released -> {
                                                             RegistrationWorkflowCheckpoint completedCheckpoint = resumedCheckpoint.advance(
                                                                     "execute_write",
@@ -573,7 +585,7 @@ public class RegistrationWorkflowService {
                                                                 ex,
                                                                 RegistrationReplyScene.OLD_SLOT_RELEASE_FAILED
                                                         )))
-                                                .onErrorResume(ex -> registrationToolService.rollbackReservedSlot(request.traceId(), targetSlotRequest, ex)));
+                                                .onErrorResume(ex -> registrationToolService.rollbackReservedSlot(request.traceId(), correlatedTargetSlotRequest, ex)));
                             });
                 });
     }
@@ -936,6 +948,15 @@ public class RegistrationWorkflowService {
 
     private boolean isConfirming(ChatRequest request) {
         return "true".equalsIgnoreCase(flowPolicy.normalizeText(request.metadata().get("confirmed")));
+    }
+
+    private String inventoryOperationId(ChatRequest request) {
+        String confirmationId = flowPolicy.normalizeText(request.metadata().get("confirmationId"));
+        if (!flowPolicy.isBlank(confirmationId)) {
+            return confirmationId;
+        }
+        String traceId = flowPolicy.normalizeText(request.traceId());
+        return flowPolicy.isBlank(traceId) ? request.chatId() : traceId;
     }
 
     private boolean requiresPreviewBeforeWrite(ChatRequest request,
