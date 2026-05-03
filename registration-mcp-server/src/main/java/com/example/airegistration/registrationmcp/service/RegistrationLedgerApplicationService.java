@@ -56,7 +56,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
     }
 
     @Override
-    public RegistrationResult create(RegistrationCommand command) {
+    public RegistrationResult create(RegistrationCommand command, String traceId) {
         Map<String, Object> requestPayload = commandPayload(command);
         String registrationId = null;
         String operatorUserId = command == null ? null : nullIfBlank(command.userId());
@@ -87,6 +87,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                             OPERATION_CREATE,
                             userId,
                             chatId,
+                            traceId,
                             true,
                             "idempotent-hit",
                             requestPayload,
@@ -126,6 +127,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                                 OPERATION_CREATE,
                                 userId,
                                 chatId,
+                                traceId,
                                 true,
                                 "idempotent-race-hit",
                                 requestPayload,
@@ -145,6 +147,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     OPERATION_CREATE,
                     userId,
                     chatId,
+                    traceId,
                     true,
                     "created",
                     requestPayload,
@@ -154,18 +157,18 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             ));
             return result;
         } catch (RuntimeException ex) {
-            appendFailureAudit(OPERATION_CREATE, registrationId, operatorUserId, chatId, requestPayload, ex);
+            appendFailureAudit(OPERATION_CREATE, registrationId, operatorUserId, chatId, traceId, requestPayload, ex);
             throw ex;
         }
     }
 
     @Override
     public RegistrationResult query(String registrationId) {
-        return query(registrationId, null);
+        return query(registrationId, null, null);
     }
 
     @Override
-    public RegistrationResult query(String registrationId, String userId) {
+    public RegistrationResult query(String registrationId, String userId, String traceId) {
         Map<String, Object> requestPayload = new HashMap<>();
         putIfPresent(requestPayload, "registrationId", registrationId);
         putIfPresent(requestPayload, "userId", userId);
@@ -182,6 +185,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     OPERATION_QUERY,
                     operatorUserId,
                     record.chatId(),
+                    traceId,
                     true,
                     "query-by-id",
                     requestPayload,
@@ -191,13 +195,13 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             ));
             return result;
         } catch (RuntimeException ex) {
-            appendFailureAudit(OPERATION_QUERY, nullIfBlank(registrationId), operatorUserId, null, requestPayload, ex);
+            appendFailureAudit(OPERATION_QUERY, nullIfBlank(registrationId), operatorUserId, null, traceId, requestPayload, ex);
             throw ex;
         }
     }
 
     @Override
-    public List<RegistrationResult> search(RegistrationSearchRequest request) {
+    public List<RegistrationResult> search(RegistrationSearchRequest request, String traceId) {
         Map<String, Object> requestPayload = searchPayload(request);
         String operatorUserId = request == null ? null : nullIfBlank(request.userId());
 
@@ -233,6 +237,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     OPERATION_QUERY,
                     userId,
                     null,
+                    traceId,
                     true,
                     "search",
                     requestPayload,
@@ -242,13 +247,13 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             ));
             return results;
         } catch (RuntimeException ex) {
-            appendFailureAudit(OPERATION_QUERY, null, operatorUserId, null, requestPayload, ex);
+            appendFailureAudit(OPERATION_QUERY, null, operatorUserId, null, traceId, requestPayload, ex);
             throw ex;
         }
     }
 
     @Override
-    public RegistrationResult cancel(RegistrationCancelRequest request) {
+    public RegistrationResult cancel(RegistrationCancelRequest request, String traceId) {
         Map<String, Object> requestPayload = cancelPayload(request);
         String registrationId = request == null ? null : nullIfBlank(request.registrationId());
         String operatorUserId = request == null ? null : nullIfBlank(request.userId());
@@ -275,6 +280,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     OPERATION_CANCEL,
                     userId,
                     record.chatId(),
+                    traceId,
                     true,
                     reason,
                     requestPayload,
@@ -284,13 +290,13 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             ));
             return result;
         } catch (RuntimeException ex) {
-            appendFailureAudit(OPERATION_CANCEL, registrationId, operatorUserId, null, requestPayload, ex);
+            appendFailureAudit(OPERATION_CANCEL, registrationId, operatorUserId, null, traceId, requestPayload, ex);
             throw ex;
         }
     }
 
     @Override
-    public RegistrationResult reschedule(RegistrationRescheduleRequest request) {
+    public RegistrationResult reschedule(RegistrationRescheduleRequest request, String traceId) {
         Map<String, Object> requestPayload = reschedulePayload(request);
         String registrationId = request == null ? null : nullIfBlank(request.registrationId());
         String operatorUserId = request == null ? null : nullIfBlank(request.userId());
@@ -319,6 +325,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                     OPERATION_RESCHEDULE,
                     userId,
                     record.chatId(),
+                    traceId,
                     true,
                     "rescheduled",
                     requestPayload,
@@ -328,7 +335,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
             ));
             return result;
         } catch (RuntimeException ex) {
-            appendFailureAudit(OPERATION_RESCHEDULE, registrationId, operatorUserId, null, requestPayload, ex);
+            appendFailureAudit(OPERATION_RESCHEDULE, registrationId, operatorUserId, null, traceId, requestPayload, ex);
             throw ex;
         }
     }
@@ -519,6 +526,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                                     String registrationId,
                                     String operatorUserId,
                                     String chatId,
+                                    String traceId,
                                     Map<String, Object> requestPayload,
                                     RuntimeException ex) {
         appendAudit(new RegistrationAuditRecord(
@@ -526,6 +534,7 @@ public class RegistrationLedgerApplicationService implements RegistrationLedgerU
                 operationType,
                 operatorUserId,
                 chatId,
+                traceId,
                 false,
                 errorMessage(ex),
                 requestPayload,

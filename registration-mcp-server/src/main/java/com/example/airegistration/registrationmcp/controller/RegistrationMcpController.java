@@ -54,7 +54,7 @@ public class RegistrationMcpController {
                 command.clinicDate(),
                 command.startTime(),
                 command.confirmed());
-        return registrationLedgerUseCase.create(command);
+        return registrationLedgerUseCase.create(command, traceId);
     }
 
     @GetMapping("/{registrationId}")
@@ -62,7 +62,7 @@ public class RegistrationMcpController {
     public RegistrationResult query(@PathVariable String registrationId,
                                     @RequestHeader(value = TraceIdSupport.TRACE_HEADER, required = false) String traceId) {
         log.info("[registration-mcp] query by path trace_id={} registration_id={}", traceId, registrationId);
-        return registrationLedgerUseCase.query(registrationId);
+        return registrationLedgerUseCase.query(registrationId, null, traceId);
     }
 
     @PostMapping("/query")
@@ -73,7 +73,7 @@ public class RegistrationMcpController {
                 traceId,
                 request.registrationId(),
                 request.userId());
-        return registrationLedgerUseCase.query(request.registrationId(), request.userId());
+        return registrationLedgerUseCase.query(request.registrationId(), request.userId(), traceId);
     }
 
     @PostMapping("/search")
@@ -87,7 +87,7 @@ public class RegistrationMcpController {
                 request.departmentCode(),
                 request.doctorId(),
                 request.status());
-        return new RegistrationSearchResponse(registrationLedgerUseCase.search(request));
+        return new RegistrationSearchResponse(registrationLedgerUseCase.search(request, traceId));
     }
 
     @PostMapping("/cancel")
@@ -99,7 +99,7 @@ public class RegistrationMcpController {
                 request.registrationId(),
                 request.userId(),
                 request.confirmed());
-        return registrationLedgerUseCase.cancel(request);
+        return registrationLedgerUseCase.cancel(request, traceId);
     }
 
     @PostMapping("/reschedule")
@@ -113,7 +113,7 @@ public class RegistrationMcpController {
                 request.clinicDate(),
                 request.startTime(),
                 request.confirmed());
-        return registrationLedgerUseCase.reschedule(request);
+        return registrationLedgerUseCase.reschedule(request, traceId);
     }
 
     @GetMapping("/audits")

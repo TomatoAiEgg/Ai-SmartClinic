@@ -202,7 +202,7 @@ class RegistrationLedgerServiceTest {
                 true,
                 "CONF-AUDIT",
                 "chat-audit"
-        ));
+        ), "trace-create");
 
         assertThatThrownBy(() -> auditedService.create(new RegistrationCommand(
                 "user-test-001",
@@ -214,14 +214,16 @@ class RegistrationLedgerServiceTest {
                 true,
                 "CONF-AUDIT",
                 "chat-audit"
-        ))).isInstanceOf(RegistrationOperationException.class);
+        ), "trace-create-failure")).isInstanceOf(RegistrationOperationException.class);
 
         assertThat(auditRepository.records)
                 .extracting(RegistrationAuditRecord::operationType)
                 .containsExactly("CREATE", "CREATE");
         assertThat(auditRepository.records.get(0).registrationId()).isEqualTo(created.registrationId());
         assertThat(auditRepository.records.get(0).success()).isTrue();
+        assertThat(auditRepository.records.get(0).traceId()).isEqualTo("trace-create");
         assertThat(auditRepository.records.get(1).success()).isFalse();
+        assertThat(auditRepository.records.get(1).traceId()).isEqualTo("trace-create-failure");
     }
 
     @Test
